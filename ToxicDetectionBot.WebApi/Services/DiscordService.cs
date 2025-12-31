@@ -65,7 +65,8 @@ public class DiscordService : IDiscordService
 
     private Task ReadyAsync()
     {
-        _logger.LogInformation("Discord client is ready!");
+        _logger.LogInformation("Discord client is ready for {GuildCount} servers!",
+            s_client?.Guilds.Count ?? 0);
         return Task.CompletedTask;
     }
 
@@ -82,12 +83,13 @@ public class DiscordService : IDiscordService
         var channelName = channel.Name ?? "Unknown";
 
         _logger.LogInformation(
-            "Message received from user '{Username}' (ID: {UserId}) in channel '{ChannelName}' (ID: {ChannelId}) in guild '{GuildName}'",
+            "Message received from user '{Username}' (ID: {UserId}) in channel '{ChannelName}' (ID: {ChannelId}) in guild '{GuildName}'. Message: {MessageContent}",
             message.Author.Username,
             message.Author.Id,
             channelName,
             channel.Id,
-            guildName);
+            guildName,
+            message.CleanContent);
 
         return Task.CompletedTask;
     }
