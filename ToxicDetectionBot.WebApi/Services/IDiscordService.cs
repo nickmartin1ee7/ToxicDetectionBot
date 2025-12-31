@@ -2,7 +2,7 @@ namespace ToxicDetectionBot.WebApi.Services;
 
 public interface IDiscordService
 {
-    Task StartAsync(string token, CancellationToken cancellationToken = default);
+    Task StartAsync();
     Task StopAsync();
     bool IsRunning { get; }
 }

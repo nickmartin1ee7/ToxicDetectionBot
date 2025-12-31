@@ -1,6 +1,4 @@
 using Hangfire;
-using Microsoft.Extensions.Options;
-using ToxicDetectionBot.WebApi.Configuration;
 
 namespace ToxicDetectionBot.WebApi.Services;
 
@@ -15,16 +13,13 @@ public class BackgroundJobService : IBackgroundJobService
 {
     private readonly IDiscordService _discordService;
     private readonly ILogger<BackgroundJobService> _logger;
-    private readonly IOptions<DiscordSettings> _discordSettings;
 
     public BackgroundJobService(
         IDiscordService discordService,
-        ILogger<BackgroundJobService> logger,
-        IOptions<DiscordSettings> discordSettings)
+        ILogger<BackgroundJobService> logger)
     {
         _discordService = discordService;
         _logger = logger;
-        _discordSettings = discordSettings;
     }
 
     public string StartDiscordClient()
@@ -37,13 +32,7 @@ public class BackgroundJobService : IBackgroundJobService
                 return string.Empty;
             }
 
-            var token = _discordSettings.Value.Token;
-            if (string.IsNullOrWhiteSpace(token))
-            {
-                throw new InvalidOperationException("Discord token is not configured. Please set Discord:Token in configuration.");
-            }
-
-            var jobId = BackgroundJob.Enqueue(() => _discordService.StartAsync(token, CancellationToken.None));
+            var jobId = BackgroundJob.Enqueue(() => _discordService.StartAsync());
             _logger.LogInformation("Discord client start job enqueued with ID: {JobId}", jobId);
             return jobId;
         }

@@ -40,7 +40,7 @@ public class DiscordService : IDiscordService
 
     public bool IsRunning => s_client is not null;
 
-    public async Task StartAsync(string token, CancellationToken cancellationToken = default)
+    public async Task StartAsync()
     {
         if (IsRunning)
         {
@@ -62,7 +62,7 @@ public class DiscordService : IDiscordService
         s_client.Ready += ReadyAsync;
         s_client.MessageReceived += MessageReceivedAsync;
 
-        await s_client.LoginAsync(TokenType.Bot, token);
+        await s_client.LoginAsync(TokenType.Bot, _options.Value.Token!);
         await s_client.StartAsync();
 
         _logger.LogInformation("Discord client started.");
