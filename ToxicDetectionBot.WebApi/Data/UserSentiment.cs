@@ -7,5 +7,6 @@ public class UserSentiment
     public required string MessageId { get; set; }
     public required string MessageContent { get; set; }
     public bool IsToxic { get; set; }
+    public bool IsSummarized { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

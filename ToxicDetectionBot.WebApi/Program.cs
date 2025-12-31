@@ -31,6 +31,7 @@ builder.Services.Configure<DiscordSettings>(builder.Configuration.GetSection(Dis
 // Add Discord and Hangfire services
 builder.Services.AddScoped<IDiscordService, DiscordService>();
 builder.Services.AddScoped<IBackgroundJobService, BackgroundJobService>();
+builder.Services.AddScoped<ISentimentSummarizerService, SentimentSummarizerService>();
 
 builder.Services.AddHangfire(configuration => configuration.UseInMemoryStorage());
 builder.Services.AddHangfireServer();
@@ -67,9 +68,15 @@ using (var scope = app.Services.CreateScope())
 // Start discord client on startup
 using (var scope = app.Services.CreateScope())
 {
-    var hangfireClient = scope.ServiceProvider.GetRequiredService<IBackgroundJobClient>();
+    var backgroundJobClient = scope.ServiceProvider.GetRequiredService<IBackgroundJobClient>();
+
+    // Hangfire
+    var recurringJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
     var bgService = scope.ServiceProvider.GetRequiredService<IBackgroundJobService>();
-    hangfireClient.Enqueue(() => bgService.StartDiscordClient());
+    var sentimentSummarizerService = scope.ServiceProvider.GetRequiredService<ISentimentSummarizerService>();
+
+    backgroundJobClient.Enqueue("ServiceLifecycle", () => bgService.StartDiscordClient());
+    recurringJobManager.AddOrUpdate("SentimentSummarizer", () => sentimentSummarizerService.SummarizeUserSentiments(), "*/5 * * * *");
 }
 
 app.Run();
