@@ -63,6 +63,15 @@ public class SlashCommandHandler : ISlashCommandHandler
         {
             if (_commandHandlers.TryGetValue(command.Data.Name, out var handler))
             {
+                _logger.LogInformation(
+                    "Handling slash command {CommandName} from user {Username} ({UserId}) in channel {ChannelName} ({ChannelId} in {GuildId})",
+                    command.Data.Name,
+                    command.User.Username,
+                    command.User.Id,
+                    command.Channel.Name,
+                    command.Channel.Id,
+                    command.GuildId);
+
                 await handler(command);
             }
             else
