@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Configuration;
-
 var builder = DistributedApplication.CreateBuilder(args);
 
 var ollamaServer = builder.AddOllama("ollama")
@@ -13,7 +11,8 @@ var chatModel = ollamaServer.AddModel(name: "chat", modelName: modelName);
 builder.AddProject<Projects.ToxicDetectionBot_WebApi>("toxicdetectionbot-webapi")
     .WithHttpHealthCheck("/swagger")
     .WithHttpHealthCheck("/hangfire")
-    .WithUrl("/swagger/index.html", "Swagger")
+    //.WithUrl("/swagger/index.html", "Swagger")
+    .WithUrl("/hangfire", "Hangfire")
     .WithReference(chatModel);
 
 builder.Build().Run();
