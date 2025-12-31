@@ -2,7 +2,9 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 var ollamaServer = builder.AddOllama("ollama")
     .WithDataVolume()
+#if DEBUG
     .WithOpenWebUI()
+#endif
     .WithEnvironment("OLLAMA_REQUEST_TIMEOUT", "600s");
 
 var modelName = builder.Configuration["Ollama:ModelName"] ?? throw new ArgumentException("Ollama:ModelName not defined!");
