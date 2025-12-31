@@ -1,5 +1,9 @@
 using Discord;
 using Discord.WebSocket;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Options;
+using System.Text.Json;
+using ToxicDetectionBot.WebApi.Configuration;
 
 namespace ToxicDetectionBot.WebApi.Services;
 
@@ -7,10 +11,21 @@ public class DiscordService : IDiscordService
 {
     private static DiscordSocketClient? s_client;
     private readonly ILogger<DiscordService> _logger;
+    private readonly IChatClient _chatClient;
+    private readonly IOptions<DiscordSettings> _options;
 
-    public DiscordService(ILogger<DiscordService> logger)
+    private JsonDocument SchemaDoc => 
+        JsonDocument.Parse(_options.Value.JsonSchema
+            ?? throw new ArgumentNullException(nameof(_options.Value.JsonSchema)));
+
+    public DiscordService(
+        ILogger<DiscordService> logger,
+        IChatClient chatClient,
+        IOptions<DiscordSettings> options)
     {
         _logger = logger;
+        _chatClient = chatClient;
+        _options = options;
     }
 
     public bool IsRunning => s_client is not null;
@@ -70,11 +85,11 @@ public class DiscordService : IDiscordService
         return Task.CompletedTask;
     }
 
-    private Task MessageReceivedAsync(SocketMessage message)
+    private async Task MessageReceivedAsync(SocketMessage message)
     {
         if (message.Author.IsBot)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         var channel = message.Channel;
@@ -83,7 +98,8 @@ public class DiscordService : IDiscordService
         var channelName = channel.Name ?? "Unknown";
 
         _logger.LogInformation(
-            "Message received from user '{Username}' (ID: {UserId}) in channel '{ChannelName}' (ID: {ChannelId}) in guild '{GuildName}'. Message: {MessageContent}",
+            "Message {MessageId} received from user '{Username}' (ID: {UserId}) in channel '{ChannelName}' (ID: {ChannelId}) in guild '{GuildName}'. Message: {MessageContent}",
+            message.Id,
             message.Author.Username,
             message.Author.Id,
             channelName,
@@ -91,6 +107,22 @@ public class DiscordService : IDiscordService
             guildName,
             message.CleanContent);
 
-        return Task.CompletedTask;
+        var chatOptions = new ChatOptions
+        {
+            Instructions = "Evaluate and classify the user sentiment of the message.",
+            ResponseFormat = ChatResponseFormat.ForJsonSchema(
+                SchemaDoc!.RootElement,
+                schemaName: "SentimentAnalysisResult",
+                schemaDescription: "Schema to classify a message's sentiment. " +
+                "The 'Response' int represents a 0-100 range. 0 = toxic. 1 = nice. The scale is confidence.")
+        };
+
+        var result = await _chatClient.GetResponseAsync(
+            chatMessage: message.CleanContent,
+            options: chatOptions);
+
+        _logger.LogInformation("Chat response to MessageId {MessageId}: {AiMessageContent}",
+            message.Id,
+            result.Text.Trim());
     }
 }

@@ -4,5 +4,6 @@ public class DiscordSettings
 {
     public static string ConfigKey => nameof(DiscordSettings);
     
-    public string Token { get; set; } = string.Empty;
+    public string? Token { get; set; }
+    public string? JsonSchema { get; set; }
 }
