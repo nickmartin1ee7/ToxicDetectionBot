@@ -191,8 +191,8 @@ public class SlashCommandHandler : ISlashCommandHandler
         }
 
         var leaderboard = await query
-            .OrderByDescending(s => s.ToxicityPercentage)
-            .ThenByDescending(s => s.TotalMessages)
+            .OrderByDescending(s => s.TotalMessages)
+            .ThenByDescending(s => s.ToxicityPercentage)
             .Take(isAdmin ? 50 : 10)
             .ToListAsync();
 
