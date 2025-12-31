@@ -31,7 +31,7 @@ public class RetentionService : IRetentionService
         using var scope = _serviceScopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        _logger.LogInformation("Starting sentiment retention purge...");
+        _logger.LogDebug("Starting sentiment retention purge...");
 
         var cutoffDate = DateTime.UtcNow.AddDays(-_discordSettings.RetentionInDays);
 
@@ -41,7 +41,7 @@ public class RetentionService : IRetentionService
 
         if (oldSentiments.Count == 0)
         {
-            _logger.LogInformation("No sentiments older than {RetentionDays} days found", _discordSettings.RetentionInDays);
+            _logger.LogDebug("No sentiments older than {RetentionDays} days found", _discordSettings.RetentionInDays);
             return;
         }
 
