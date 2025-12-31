@@ -31,6 +31,12 @@ public class BackgroundJobService : IBackgroundJobService
     {
         try
         {
+            if (_discordService.IsRunning)
+            {
+                _logger.LogInformation("Discord client is already running");
+                return string.Empty;
+            }
+
             var token = _discordSettings.Value.Token;
             if (string.IsNullOrWhiteSpace(token))
             {
