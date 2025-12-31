@@ -75,7 +75,7 @@ using (var scope = app.Services.CreateScope())
     var sentimentSummarizerService = scope.ServiceProvider.GetRequiredService<ISentimentSummarizerService>();
 
     _ = bgService.StartDiscordClient();
-    recurringJobManager.AddOrUpdate("sentiment-summarizer", () => sentimentSummarizerService.SummarizeUserSentiments(), "*/5 * * * *");
+    recurringJobManager.AddOrUpdate("sentiment-summarizer", () => sentimentSummarizerService.SummarizeUserSentiments(), "*/1 * * * *");
 }
 
 app.Run();
