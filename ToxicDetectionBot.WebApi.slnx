@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="ToxicDetectionBot.WebApi.AppHost/ToxicDetectionBot.WebApi.AppHost.csproj" />
+  <Project Path="ToxicDetectionBot.WebApi.ServiceDefaults/ToxicDetectionBot.WebApi.ServiceDefaults.csproj" />
+  <Project Path="ToxicDetectionBot.WebApi/ToxicDetectionBot.WebApi.csproj" />
+</Solution>
