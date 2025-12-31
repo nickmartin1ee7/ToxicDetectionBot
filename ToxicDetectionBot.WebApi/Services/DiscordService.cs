@@ -87,9 +87,14 @@ public class DiscordService : IDiscordService
             options: s_chatOptions)
             .GetAwaiter().GetResult();
 
-        _logger.LogInformation("Chat response to MessageId {MessageId}: {AiMessageContent}",
+        var resultText = result.Text.Trim();
+
+        var cResult = JsonSerializer.Deserialize<ClassificationResult>(resultText);
+
+        _logger.LogInformation("Chat classification for MessageId {MessageId} - {ClassificationResult}. Message: {MessageContent}",
             messageId,
-            result.Text.Trim());
+            cResult,
+            messageContent);
     }
 
     private void Initialize()
@@ -144,3 +149,8 @@ public class DiscordService : IDiscordService
         _hangfireBgClient.Enqueue<DiscordService>(ds => ds.ClassifyMessage(message.Id.ToString(), messageContent));
     }
 }
+
+/// <summary>
+/// Bound to the JSON Schema
+/// </summary>
+internal record ClassificationResult(bool IsToxic);
