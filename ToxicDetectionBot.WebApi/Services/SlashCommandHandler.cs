@@ -179,7 +179,7 @@ public class SlashCommandHandler : ISlashCommandHandler
             .ToListAsync();
 
         var embed = BuildLeaderboardEmbed(guild, leaderboard, isAdmin);
-        await command.RespondAsync(embed: embed);
+        await command.RespondAsync(embed: embed, ephemeral: isAdmin);
     }
 
     private static Embed BuildLeaderboardEmbed(SocketGuild guild, List<UserSentimentScore> leaderboard, bool isGlobalView)
