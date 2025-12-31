@@ -67,14 +67,13 @@ using (var scope = app.Services.CreateScope())
 // Start discord client on startup
 using (var scope = app.Services.CreateScope())
 {
-    var backgroundJobClient = scope.ServiceProvider.GetRequiredService<IBackgroundJobClient>();
+    var bgService = scope.ServiceProvider.GetRequiredService<IBackgroundJobService>();
 
     // Hangfire
     var recurringJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
-    var bgService = scope.ServiceProvider.GetRequiredService<IBackgroundJobService>();
     var sentimentSummarizerService = scope.ServiceProvider.GetRequiredService<ISentimentSummarizerService>();
 
-    backgroundJobClient.Enqueue(() => bgService.StartDiscordClient());
+    _ = bgService.StartDiscordClient();
     recurringJobManager.AddOrUpdate("sentiment-summarizer", () => sentimentSummarizerService.SummarizeUserSentiments(), "*/5 * * * *");
 }
 
