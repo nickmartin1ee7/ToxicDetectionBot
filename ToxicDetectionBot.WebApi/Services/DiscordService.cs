@@ -99,7 +99,7 @@ public class DiscordService : IDiscordService
 
     private void Initialize()
     {
-        s_chatOptions = new ChatOptions
+        s_chatOptions ??= new ChatOptions
         {
             Instructions = "Evaluate and classify the user sentiment of the message.",
             ResponseFormat = ChatResponseFormat.ForJsonSchema(
