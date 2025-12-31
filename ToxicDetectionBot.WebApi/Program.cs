@@ -7,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 
 // Add services to the container.
+builder.Services.AddProblemDetails();
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
@@ -25,7 +26,12 @@ builder.Services.AddScoped<IBackgroundJobService, BackgroundJobService>();
 builder.Services.AddHangfire(configuration => configuration.UseInMemoryStorage());
 builder.Services.AddHangfireServer();
 
+builder.AddOllamaApiClient("chat")
+    .AddChatClient();
+
 var app = builder.Build();
+
+app.UseExceptionHandler();
 
 app.MapDefaultEndpoints();
 
