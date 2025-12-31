@@ -20,7 +20,7 @@ builder.Services.AddSwaggerGen();
 builder.Services.Configure<DiscordSettings>(builder.Configuration.GetSection(DiscordSettings.ConfigKey));
 
 // Add Discord and Hangfire services
-builder.Services.AddSingleton<IDiscordService, DiscordService>();
+builder.Services.AddScoped<IDiscordService, DiscordService>();
 builder.Services.AddScoped<IBackgroundJobService, BackgroundJobService>();
 
 builder.Services.AddHangfire(configuration => configuration.UseInMemoryStorage());
