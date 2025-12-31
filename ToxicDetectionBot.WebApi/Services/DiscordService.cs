@@ -16,9 +16,8 @@ public class DiscordService : IDiscordService
     private readonly IChatClient _chatClient;
     private readonly IOptions<DiscordSettings> _options;
     private readonly IBackgroundJobClient _hangfireBgClient;
-    private readonly AppDbContext _appDbContext;
     private readonly ISlashCommandHandler _slashCommandHandler;
-
+    private readonly IServiceScopeFactory _serviceScopeFactory;
     private static DiscordSocketClient? s_client;
     private static ChatOptions? s_chatOptions;
 
@@ -31,15 +30,15 @@ public class DiscordService : IDiscordService
         IChatClient chatClient,
         IOptions<DiscordSettings> options,
         IBackgroundJobClient hangfireBgClient,
-        AppDbContext appDbContext,
-        ISlashCommandHandler slashCommandHandler)
+        ISlashCommandHandler slashCommandHandler,
+        IServiceScopeFactory serviceScopeFactory)
     {
         _logger = logger;
         _chatClient = chatClient;
         _options = options;
         _hangfireBgClient = hangfireBgClient;
-        _appDbContext = appDbContext;
         _slashCommandHandler = slashCommandHandler;
+        _serviceScopeFactory = serviceScopeFactory;
     }
 
     public bool IsRunning => s_client is not null;
@@ -105,14 +104,18 @@ public class DiscordService : IDiscordService
             cResult,
             messageContent);
 
-        _appDbContext.UserSentiments.Add(new UserSentiment
+
+        using var scope = _serviceScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        dbContext.UserSentiments.Add(new UserSentiment
         {
             UserId = userId,
             MessageId = messageId,
             MessageContent = messageContent,
             IsToxic = cResult?.IsToxic ?? false
         });
-        await _appDbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync();
     }
 
     private void Initialize()
@@ -174,9 +177,12 @@ public class DiscordService : IDiscordService
             guildName,
             messageContent);
 
+        using var scope = _serviceScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
         // Check if user has opted out
         var userId = message.Author.Id.ToString();
-        var optOut = await _appDbContext.UserOptOuts.FindAsync(userId);
+        var optOut = await dbContext.UserOptOuts.FindAsync(userId);
         
         if (optOut?.IsOptedOut == true)
         {
