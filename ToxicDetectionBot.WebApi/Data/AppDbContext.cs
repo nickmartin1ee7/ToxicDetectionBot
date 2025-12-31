@@ -20,6 +20,8 @@ public class AppDbContext : DbContext
         {
             entity.HasIndex(e => e.UserId);
             entity.HasIndex(e => e.IsSummarized);
+            entity.HasIndex(e => e.GuildName);
+            entity.HasIndex(e => e.ChannelName);
         });
 
         modelBuilder.Entity<UserSentimentScore>(entity =>

@@ -89,7 +89,7 @@ public class DiscordService : IDiscordService
         _logger.LogInformation("Discord client stopped.");
     }
 
-    public async Task ClassifyMessage(string messageId, string userId, string messageContent)
+    public async Task ClassifyMessage(string messageId, string userId, string messageContent, string username, string guildName, string channelName)
     {
         var result = _chatClient.GetResponseAsync(
             chatMessage: messageContent,
@@ -114,6 +114,9 @@ public class DiscordService : IDiscordService
             UserId = userId,
             MessageId = messageId,
             MessageContent = messageContent,
+            Username = username,
+            GuildName = guildName,
+            ChannelName = channelName,
             IsToxic = cResult?.IsToxic ?? false
         });
         await dbContext.SaveChangesAsync().ConfigureAwait(false);
@@ -165,13 +168,14 @@ public class DiscordService : IDiscordService
         var guildChannel = channel as SocketGuildChannel;
         var guildName = guildChannel?.Guild.Name ?? "DM";
         var channelName = channel.Name ?? "Unknown";
+        var username = message.Author.Username;
 
         var messageContent = message.CleanContent;
 
         _logger.LogInformation(
             "Message {MessageId} received from user '{Username}' (ID: {UserId}) in channel '{ChannelName}' (ID: {ChannelId}) in guild '{GuildName}'. Message: {MessageContent}",
             message.Id,
-            message.Author.Username,
+            username,
             message.Author.Id,
             channelName,
             channel.Id,
@@ -191,7 +195,7 @@ public class DiscordService : IDiscordService
             return;
         }
 
-        _bg.Enqueue<DiscordService>(ds => ds.ClassifyMessage(message.Id.ToString(), userId, messageContent));
+        _bg.Enqueue<DiscordService>(ds => ds.ClassifyMessage(message.Id.ToString(), userId, messageContent, username, guildName, channelName));
     }
 }
 

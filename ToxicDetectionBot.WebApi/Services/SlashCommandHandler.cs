@@ -178,11 +178,27 @@ public class SlashCommandHandler : ISlashCommandHandler
             .Take(isAdmin ? 50 : 10)
             .ToListAsync();
 
-        var embed = BuildLeaderboardEmbed(guild, leaderboard, isAdmin);
+        // For global view, get the most recent sentiment data for each user to display username, guild, and channel
+        Dictionary<string, UserSentiment?>? sentimentDetails = null;
+        if (isAdmin && leaderboard.Count > 0)
+        {
+            var userIds = leaderboard.Select(l => l.UserId).ToList();
+            var recentSentiments = await dbContext.UserSentiments
+                .Where(s => userIds.Contains(s.UserId))
+                .GroupBy(s => s.UserId)
+                .Select(g => g.OrderByDescending(s => s.CreatedAt).FirstOrDefault())
+                .ToListAsync();
+
+            sentimentDetails = recentSentiments
+                .Where(s => s != null)
+                .ToDictionary(s => s!.UserId, s => s);
+        }
+
+        var embed = BuildLeaderboardEmbed(guild, leaderboard, isAdmin, sentimentDetails);
         await command.RespondAsync(embed: embed, ephemeral: isAdmin);
     }
 
-    private static Embed BuildLeaderboardEmbed(SocketGuild guild, List<UserSentimentScore> leaderboard, bool isGlobalView)
+    private static Embed BuildLeaderboardEmbed(SocketGuild guild, List<UserSentimentScore> leaderboard, bool isGlobalView, Dictionary<string, UserSentiment?>? sentimentDetails = null)
     {
         var title = isGlobalView 
             ? "🐍 Global Toxicity Leaderboard"
@@ -203,10 +219,18 @@ public class SlashCommandHandler : ISlashCommandHandler
 
         var description = string.Join('\n', leaderboard.Select((stat, index) =>
         {
-            var user = guild.GetUser(ulong.Parse(stat.UserId));
-            var username = user?.Username ?? $"Unknown User ({stat.UserId})";
             var medal = GetRankMedal(index);
-            return $"{medal} **{username}** - {stat.ToxicityPercentage:F2}% toxic ({stat.ToxicMessages}/{stat.TotalMessages} messages)";
+            
+            if (isGlobalView && sentimentDetails?.TryGetValue(stat.UserId, out var sentiment) == true && sentiment != null)
+            {
+                return $"{medal} **{sentiment.Username}** (Guild: {sentiment.GuildName}, Channel: {sentiment.ChannelName}) - {stat.ToxicityPercentage:F2}% toxic ({stat.ToxicMessages}/{stat.TotalMessages} messages)";
+            }
+            else
+            {
+                var user = guild.GetUser(ulong.Parse(stat.UserId));
+                var username = user?.Username ?? $"Unknown User ({stat.UserId})";
+                return $"{medal} **{username}** - {stat.ToxicityPercentage:F2}% toxic ({stat.ToxicMessages}/{stat.TotalMessages} messages)";
+            }
         }));
 
         embed.WithDescription(description);
