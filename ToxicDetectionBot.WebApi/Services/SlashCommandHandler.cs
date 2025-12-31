@@ -1,8 +1,6 @@
 ﻿using Discord;
 using Discord.WebSocket;
-using Hangfire;
 using Microsoft.EntityFrameworkCore;
-using System;
 using ToxicDetectionBot.WebApi.Data;
 
 namespace ToxicDetectionBot.WebApi.Services;
@@ -236,10 +234,22 @@ public class SlashCommandHandler : ISlashCommandHandler
             optOut.LastChangedAt = DateTime.UtcNow;
         }
 
+        // Delete user data when opting out
+        if (isOptingOut)
+        {
+            await dbContext.UserSentiments
+                .Where(s => s.UserId == userId)
+                .ExecuteDeleteAsync();
+
+            await dbContext.UserSentimentScores
+                .Where(s => s.UserId == userId)
+                .ExecuteDeleteAsync();
+        }
+
         await dbContext.SaveChangesAsync();
 
         var message = isOptingOut
-            ? "✅ You have opted **OUT** of sentiment analysis. Your messages will no longer be evaluated."
+            ? "✅ You have opted **OUT** of sentiment analysis. Your messages will no longer be evaluated and your existing data has been deleted."
             : "✅ You have opted **IN** to sentiment analysis. Your messages will now be evaluated.";
 
         await command.RespondAsync(message, ephemeral: true);
