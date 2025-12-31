@@ -39,22 +39,27 @@ public class SentimentSummarizerService : ISentimentSummarizerService
         }
 
         var userGroups = unsummarizedSentiments.GroupBy(us => us.UserId);
+        var totalToxicMessages = 0;
+        var totalNonToxicMessages = 0;
 
         foreach (var userGroup in userGroups)
         {
             var userId = userGroup.Key;
             var sentiments = userGroup.ToList();
 
-            var totalMessages = sentiments.Count;
+            var messageCount = sentiments.Count;
             var toxicMessages = sentiments.Count(s => s.IsToxic);
-            var nonToxicMessages = totalMessages - toxicMessages;
+            var nonToxicMessages = messageCount - toxicMessages;
+
+            totalToxicMessages += toxicMessages;
+            totalNonToxicMessages += nonToxicMessages;
 
             var existingScore = await dbContext.UserSentimentScores
                 .FirstOrDefaultAsync(s => s.UserId == userId);
 
             if (existingScore is not null)
             {
-                existingScore.TotalMessages += totalMessages;
+                existingScore.TotalMessages += messageCount;
                 existingScore.ToxicMessages += toxicMessages;
                 existingScore.NonToxicMessages += nonToxicMessages;
                 existingScore.ToxicityPercentage = existingScore.TotalMessages > 0
@@ -64,14 +69,14 @@ public class SentimentSummarizerService : ISentimentSummarizerService
             }
             else
             {
-                var toxicityPercentage = totalMessages > 0
-                    ? (double)toxicMessages / totalMessages * 100
+                var toxicityPercentage = messageCount > 0
+                    ? (double)toxicMessages / messageCount * 100
                     : 0;
 
                 var sentimentScore = new UserSentimentScore
                 {
                     UserId = userId,
-                    TotalMessages = totalMessages,
+                    TotalMessages = messageCount,
                     ToxicMessages = toxicMessages,
                     NonToxicMessages = nonToxicMessages,
                     ToxicityPercentage = toxicityPercentage
@@ -84,19 +89,21 @@ public class SentimentSummarizerService : ISentimentSummarizerService
             {
                 sentiment.IsSummarized = true;
             }
-
-            _logger.LogInformation(
-                "Summarized sentiments for user {UserId}: {TotalMessages} total, {ToxicMessages} toxic ({ToxicityPercentage:F2}%)",
-                userId,
-                totalMessages,
-                toxicMessages,
-                existingScore?.ToxicityPercentage ?? (totalMessages > 0 ? (double)toxicMessages / totalMessages * 100 : 0));
         }
 
         await dbContext.SaveChangesAsync();
 
-        _logger.LogInformation("Sentiment summarization completed. Processed {UserCount} users with {TotalMessages} messages",
+        var totalMessages = totalToxicMessages + totalNonToxicMessages;
+        var overallToxicityPercentage = totalMessages > 0
+            ? (double)totalToxicMessages / totalMessages * 100
+            : 0;
+
+        _logger.LogInformation(
+            "Sentiment summarization completed. Processed {UserCount} users with {TotalMessages} messages ({ToxicMessages} toxic, {NonToxicMessages} non-toxic, {ToxicityPercentage:F2}% toxic overall)",
             userGroups.Count(),
-            unsummarizedSentiments.Count);
+            totalMessages,
+            totalToxicMessages,
+            totalNonToxicMessages,
+            overallToxicityPercentage);
     }
 }
