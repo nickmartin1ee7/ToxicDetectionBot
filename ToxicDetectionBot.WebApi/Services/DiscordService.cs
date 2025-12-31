@@ -29,14 +29,12 @@ public class DiscordService : IDiscordService
         ILogger<DiscordService> logger,
         IChatClient chatClient,
         IOptions<DiscordSettings> options,
-        IBackgroundJobClient hangfireBgClient,
         ISlashCommandHandler slashCommandHandler,
         IServiceScopeFactory serviceScopeFactory)
     {
         _logger = logger;
         _chatClient = chatClient;
         _options = options;
-        _hangfireBgClient = hangfireBgClient;
         _slashCommandHandler = slashCommandHandler;
         _serviceScopeFactory = serviceScopeFactory;
     }
@@ -66,8 +64,8 @@ public class DiscordService : IDiscordService
         s_client.MessageReceived += MessageReceivedAsync;
         s_client.SlashCommandExecuted += SlashCommandExecutedAsync;
 
-        await s_client.LoginAsync(TokenType.Bot, _options.Value.Token!);
-        await s_client.StartAsync();
+        await s_client.LoginAsync(TokenType.Bot, _options.Value.Token!).ConfigureAwait(false);
+        await s_client.StartAsync().ConfigureAwait(false);
 
         _logger.LogInformation("Discord client started.");
     }
@@ -81,7 +79,7 @@ public class DiscordService : IDiscordService
 
         _logger.LogInformation("Stopping Discord client...");
 
-        await s_client.StopAsync();
+        await s_client.StopAsync().ConfigureAwait(false);
         s_client.Dispose();
         s_client = null;
 
@@ -115,7 +113,7 @@ public class DiscordService : IDiscordService
             MessageContent = messageContent,
             IsToxic = cResult?.IsToxic ?? false
         });
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync().ConfigureAwait(false);
     }
 
     private void Initialize()
@@ -144,13 +142,13 @@ public class DiscordService : IDiscordService
         
         if (s_client is not null)
         {
-            await _slashCommandHandler.RegisterCommandsAsync(s_client);
+            await _slashCommandHandler.RegisterCommandsAsync(s_client).ConfigureAwait(false);
         }
     }
 
     private async Task SlashCommandExecutedAsync(SocketSlashCommand command)
     {
-        _hangfireBgClient.Enqueue<ISlashCommandHandler>(sch => sch.HandleSlashCommandAsync(command));
+        _ = _slashCommandHandler.HandleSlashCommandAsync(command).ConfigureAwait(false);
     }
 
     private async Task MessageReceivedAsync(SocketMessage message)
@@ -182,7 +180,7 @@ public class DiscordService : IDiscordService
 
         // Check if user has opted out
         var userId = message.Author.Id.ToString();
-        var optOut = await dbContext.UserOptOuts.FindAsync(userId);
+        var optOut = await dbContext.UserOptOuts.FindAsync(userId).ConfigureAwait(false);
         
         if (optOut?.IsOptedOut == true)
         {

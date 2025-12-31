@@ -1,6 +1,8 @@
 ﻿using Discord;
 using Discord.WebSocket;
+using Hangfire;
 using Microsoft.EntityFrameworkCore;
+using System;
 using ToxicDetectionBot.WebApi.Data;
 
 namespace ToxicDetectionBot.WebApi.Services;
@@ -34,35 +36,7 @@ public class SlashCommandHandler : ISlashCommandHandler
     public async Task RegisterCommandsAsync(DiscordSocketClient client)
     {
         var commands = BuildSlashCommands();
-
-        foreach (var guild in client.Guilds)
-        {
-            try
-            {
-                foreach (var command in commands)
-                {
-                    await guild.CreateApplicationCommandAsync(command);
-                }
-
-                _logger.LogInformation(
-                    "Registered slash commands for guild {GuildName} ({GuildId}) with {GuildUserCount} users",
-                    guild.Name, guild.Id, guild.Users.Count);
-            }
-            catch (Exception ex)
-            {
-                // Discord.Net.HttpException: The server responded with error 50001: Missing Access
-                if (ex.Message.Contains("50001"))
-                {
-                    _logger.LogWarning("Failed to register slash commands for guild {GuildName} ({GuildId}) with {GuildUserCount} users ({ErrorMessage})",
-                        guild.Name, guild.Id, guild.Users.Count, ex.Message[ex.Message.IndexOf("50001") ..]);
-                    return;
-                }
-
-                _logger.LogWarning(ex,
-                    "Failed to register slash commands for guild {GuildName} ({GuildId}) with {GuildUserCount} users",
-                    guild.Name, guild.Id, guild.Users.Count);
-            }
-        }
+        _ = Task.Run(async () => await client.BulkOverwriteGlobalApplicationCommandsAsync(commands));
     }
 
     public async Task HandleSlashCommandAsync(SocketSlashCommand command)
@@ -80,7 +54,7 @@ public class SlashCommandHandler : ISlashCommandHandler
                     command.Channel.Id,
                     command.GuildId);
 
-                await handler(command);
+                _ = Task.Run(async () => await handler(command));
             }
             else
             {
