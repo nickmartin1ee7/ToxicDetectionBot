@@ -135,7 +135,7 @@ public class DiscordService : IDiscordService
 
     private async Task ReadyAsync()
     {
-        _logger.LogInformation("Discord client is ready for {GuildCount} servers and {GuildeUserCount} users!",
+        _logger.LogInformation("Discord client is ready for {GuildCount} servers and {GuildUserCount} users!",
             s_client?.Guilds.Count ?? 0,
             s_client?.Guilds.Sum(g => g.Users.Count));
         
