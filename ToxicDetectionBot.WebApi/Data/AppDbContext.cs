@@ -10,6 +10,7 @@ public class AppDbContext : DbContext
 
     public DbSet<UserSentiment> UserSentiments { get; set; }
     public DbSet<UserSentimentScore> UserSentimentScores { get; set; }
+    public DbSet<UserOptOut> UserOptOuts { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -24,6 +25,12 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<UserSentimentScore>(entity =>
         {
             entity.HasKey(e => e.UserId);
+        });
+
+        modelBuilder.Entity<UserOptOut>(entity =>
+        {
+            entity.HasKey(e => e.UserId);
+            entity.HasIndex(e => e.IsOptedOut);
         });
     }
 }

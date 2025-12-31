@@ -16,6 +16,7 @@ public class DiscordService : IDiscordService
     private readonly IOptions<DiscordSettings> _options;
     private readonly IBackgroundJobClient _hangfireBgClient;
     private readonly AppDbContext _appDbContext;
+    private readonly ISlashCommandHandler _slashCommandHandler;
 
     private static DiscordSocketClient? s_client;
     private static ChatOptions? s_chatOptions;
@@ -29,13 +30,15 @@ public class DiscordService : IDiscordService
         IChatClient chatClient,
         IOptions<DiscordSettings> options,
         IBackgroundJobClient hangfireBgClient,
-        AppDbContext appDbContext)
+        AppDbContext appDbContext,
+        ISlashCommandHandler slashCommandHandler)
     {
         _logger = logger;
         _chatClient = chatClient;
         _options = options;
         _hangfireBgClient = hangfireBgClient;
         _appDbContext = appDbContext;
+        _slashCommandHandler = slashCommandHandler;
     }
 
     public bool IsRunning => s_client is not null;
@@ -61,6 +64,7 @@ public class DiscordService : IDiscordService
         s_client.Log += LogAsync;
         s_client.Ready += ReadyAsync;
         s_client.MessageReceived += MessageReceivedAsync;
+        s_client.SlashCommandExecuted += SlashCommandExecutedAsync;
 
         await s_client.LoginAsync(TokenType.Bot, _options.Value.Token!);
         await s_client.StartAsync();
@@ -128,11 +132,20 @@ public class DiscordService : IDiscordService
         return Task.CompletedTask;
     }
 
-    private Task ReadyAsync()
+    private async Task ReadyAsync()
     {
         _logger.LogInformation("Discord client is ready for {GuildCount} servers!",
             s_client?.Guilds.Count ?? 0);
-        return Task.CompletedTask;
+        
+        if (s_client is not null)
+        {
+            await _slashCommandHandler.RegisterCommandsAsync(s_client);
+        }
+    }
+
+    private async Task SlashCommandExecutedAsync(SocketSlashCommand command)
+    {
+        _hangfireBgClient.Enqueue<ISlashCommandHandler>(sch => sch.HandleSlashCommandAsync(command));
     }
 
     private async Task MessageReceivedAsync(SocketMessage message)
@@ -159,7 +172,17 @@ public class DiscordService : IDiscordService
             guildName,
             messageContent);
 
-        _hangfireBgClient.Enqueue<DiscordService>(ds => ds.ClassifyMessage(message.Id.ToString(), message.Author.Id.ToString(), messageContent));
+        // Check if user has opted out
+        var userId = message.Author.Id.ToString();
+        var optOut = await _appDbContext.UserOptOuts.FindAsync(userId);
+        
+        if (optOut?.IsOptedOut == true)
+        {
+            _logger.LogInformation("User {UserId} has opted out, skipping sentiment analysis", userId);
+            return;
+        }
+
+        _hangfireBgClient.Enqueue<DiscordService>(ds => ds.ClassifyMessage(message.Id.ToString(), userId, messageContent));
     }
 }
 

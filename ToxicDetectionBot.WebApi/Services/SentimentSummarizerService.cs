@@ -52,7 +52,7 @@ public class SentimentSummarizerService : ISentimentSummarizerService
             var existingScore = await dbContext.UserSentimentScores
                 .FirstOrDefaultAsync(s => s.UserId == userId);
 
-            if (existingScore != null)
+            if (existingScore is not null)
             {
                 existingScore.TotalMessages += totalMessages;
                 existingScore.ToxicMessages += toxicMessages;

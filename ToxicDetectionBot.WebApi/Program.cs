@@ -31,6 +31,7 @@ builder.Services.Configure<DiscordSettings>(builder.Configuration.GetSection(Dis
 builder.Services.AddScoped<IDiscordService, DiscordService>();
 builder.Services.AddScoped<IBackgroundJobService, BackgroundJobService>();
 builder.Services.AddScoped<ISentimentSummarizerService, SentimentSummarizerService>();
+builder.Services.AddScoped<ISlashCommandHandler, SlashCommandHandler>();
 
 builder.Services.AddHangfire(configuration => configuration.UseInMemoryStorage());
 builder.Services.AddHangfireServer();
