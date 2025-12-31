@@ -112,7 +112,7 @@ public class SlashCommandHandler : ISlashCommandHandler
         var optOut = await dbContext.UserOptOuts.FirstOrDefaultAsync(o => o.UserId == userId);
 
         var embed = BuildUserStatsEmbed(user, stats, optOut);
-        await command.RespondAsync(embed: embed, ephemeral: true);
+        await command.RespondAsync(embed: embed);
     }
 
     private static Embed BuildUserStatsEmbed(SocketUser user, UserSentimentScore? stats, UserOptOut? optOut)
@@ -149,7 +149,7 @@ public class SlashCommandHandler : ISlashCommandHandler
     {
         if (command.Channel is not SocketGuildChannel { Guild: var guild })
         {
-            await command.RespondAsync("This command can only be used in a server.", ephemeral: true);
+            await command.RespondAsync("This command can only be used in a server.");
             return;
         }
 
