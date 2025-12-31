@@ -31,6 +31,7 @@ builder.Services.Configure<DiscordSettings>(builder.Configuration.GetSection(Dis
 builder.Services.AddScoped<IDiscordService, DiscordService>();
 builder.Services.AddScoped<IBackgroundJobService, BackgroundJobService>();
 builder.Services.AddScoped<ISentimentSummarizerService, SentimentSummarizerService>();
+builder.Services.AddScoped<IRetentionService, RetentionService>();
 builder.Services.AddScoped<ISlashCommandHandler, SlashCommandHandler>();
 
 builder.Services.AddHangfire(configuration => configuration.UseInMemoryStorage());
@@ -73,10 +74,13 @@ using (var scope = app.Services.CreateScope())
 
     // Hangfire
     var recurringJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
+
     var sentimentSummarizerService = scope.ServiceProvider.GetRequiredService<ISentimentSummarizerService>();
+    var retentionService = scope.ServiceProvider.GetRequiredService<IRetentionService>();
 
     _ = bgService.StartDiscordClient();
     recurringJobManager.AddOrUpdate("sentiment-summarizer", () => sentimentSummarizerService.SummarizeUserSentiments(), "*/1 * * * *");
+    recurringJobManager.AddOrUpdate("sentiment-retention", () => retentionService.PurgeOldSentiments(), "*/10 * * * *");
 }
 
 app.Run();
