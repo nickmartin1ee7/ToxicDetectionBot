@@ -10,13 +10,13 @@ namespace ToxicDetectionBot.WebApi.Services;
 
 public class DiscordService : IDiscordService
 {
-    private static DiscordSocketClient? s_client;
     private readonly ILogger<DiscordService> _logger;
     private readonly IChatClient _chatClient;
     private readonly IOptions<DiscordSettings> _options;
     private readonly IBackgroundJobClient _hangfireBgClient;
 
-    private ChatOptions? _chatOptions;
+    private static DiscordSocketClient? s_client;
+    private static ChatOptions? s_chatOptions;
 
     private JsonDocument SchemaDoc => 
         JsonDocument.Parse(_options.Value.JsonSchema
@@ -84,7 +84,7 @@ public class DiscordService : IDiscordService
     {
         var result = _chatClient.GetResponseAsync(
             chatMessage: messageContent,
-            options: _chatOptions)
+            options: s_chatOptions)
             .GetAwaiter().GetResult();
 
         _logger.LogInformation("Chat response to MessageId {MessageId}: {AiMessageContent}",
@@ -94,14 +94,13 @@ public class DiscordService : IDiscordService
 
     private void Initialize()
     {
-        _chatOptions = new ChatOptions
+        s_chatOptions = new ChatOptions
         {
             Instructions = "Evaluate and classify the user sentiment of the message.",
             ResponseFormat = ChatResponseFormat.ForJsonSchema(
                 SchemaDoc!.RootElement,
                 schemaName: "SentimentAnalysisResult",
-                schemaDescription: "Schema to classify a message's sentiment. " +
-                                   "The 'Response' int represents a 0-100 range. 0 = toxic. 1 = nice. The scale is confidence.")
+                schemaDescription: "Schema to classify a message's sentiment. IsToxic: False represents that the message was toxic/mean. True represents that the message was nice/polite.")
         };
     }
 
