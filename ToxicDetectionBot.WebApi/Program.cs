@@ -51,7 +51,7 @@ app.MapHangfireDashboard();
 // Start discord client on startup
 using (var scope = app.Services.CreateScope())
 {
-    var hangfireClient = scope.ServiceProvider.GetRequiredService<IBackgroundJobClientV2>();
+    var hangfireClient = scope.ServiceProvider.GetRequiredService<IBackgroundJobClient>();
     var bgService = scope.ServiceProvider.GetRequiredService<IBackgroundJobService>();
     hangfireClient.Enqueue(() => bgService.StartDiscordClient());
 }

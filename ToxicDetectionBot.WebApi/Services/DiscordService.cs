@@ -1,5 +1,6 @@
 using Discord;
 using Discord.WebSocket;
+using Hangfire;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
@@ -13,6 +14,9 @@ public class DiscordService : IDiscordService
     private readonly ILogger<DiscordService> _logger;
     private readonly IChatClient _chatClient;
     private readonly IOptions<DiscordSettings> _options;
+    private readonly IBackgroundJobClient _hangfireBgClient;
+
+    private ChatOptions? _chatOptions;
 
     private JsonDocument SchemaDoc => 
         JsonDocument.Parse(_options.Value.JsonSchema
@@ -21,11 +25,13 @@ public class DiscordService : IDiscordService
     public DiscordService(
         ILogger<DiscordService> logger,
         IChatClient chatClient,
-        IOptions<DiscordSettings> options)
+        IOptions<DiscordSettings> options,
+        IBackgroundJobClient hangfireBgClient)
     {
         _logger = logger;
         _chatClient = chatClient;
         _options = options;
+        _hangfireBgClient = hangfireBgClient;
     }
 
     public bool IsRunning => s_client is not null;
@@ -36,6 +42,8 @@ public class DiscordService : IDiscordService
         {
             throw new InvalidOperationException("Discord client is already running.");
         }
+
+        Initialize();
 
         var config = new DiscordSocketConfig
         {
@@ -72,6 +80,31 @@ public class DiscordService : IDiscordService
         _logger.LogInformation("Discord client stopped.");
     }
 
+    public async Task ClassifyMessage(string messageId, string messageContent)
+    {
+        var result = _chatClient.GetResponseAsync(
+            chatMessage: messageContent,
+            options: _chatOptions)
+            .GetAwaiter().GetResult();
+
+        _logger.LogInformation("Chat response to MessageId {MessageId}: {AiMessageContent}",
+            messageId,
+            result.Text.Trim());
+    }
+
+    private void Initialize()
+    {
+        _chatOptions = new ChatOptions
+        {
+            Instructions = "Evaluate and classify the user sentiment of the message.",
+            ResponseFormat = ChatResponseFormat.ForJsonSchema(
+                SchemaDoc!.RootElement,
+                schemaName: "SentimentAnalysisResult",
+                schemaDescription: "Schema to classify a message's sentiment. " +
+                                   "The 'Response' int represents a 0-100 range. 0 = toxic. 1 = nice. The scale is confidence.")
+        };
+    }
+
     private Task LogAsync(LogMessage log)
     {
         _logger.LogInformation("Discord client: {Message}", log.ToString());
@@ -97,6 +130,8 @@ public class DiscordService : IDiscordService
         var guildName = guildChannel?.Guild.Name ?? "DM";
         var channelName = channel.Name ?? "Unknown";
 
+        var messageContent = message.CleanContent;
+
         _logger.LogInformation(
             "Message {MessageId} received from user '{Username}' (ID: {UserId}) in channel '{ChannelName}' (ID: {ChannelId}) in guild '{GuildName}'. Message: {MessageContent}",
             message.Id,
@@ -105,24 +140,8 @@ public class DiscordService : IDiscordService
             channelName,
             channel.Id,
             guildName,
-            message.CleanContent);
+            messageContent);
 
-        var chatOptions = new ChatOptions
-        {
-            Instructions = "Evaluate and classify the user sentiment of the message.",
-            ResponseFormat = ChatResponseFormat.ForJsonSchema(
-                SchemaDoc!.RootElement,
-                schemaName: "SentimentAnalysisResult",
-                schemaDescription: "Schema to classify a message's sentiment. " +
-                "The 'Response' int represents a 0-100 range. 0 = toxic. 1 = nice. The scale is confidence.")
-        };
-
-        var result = await _chatClient.GetResponseAsync(
-            chatMessage: message.CleanContent,
-            options: chatOptions);
-
-        _logger.LogInformation("Chat response to MessageId {MessageId}: {AiMessageContent}",
-            message.Id,
-            result.Text.Trim());
+        _hangfireBgClient.Enqueue<DiscordService>(ds => ds.ClassifyMessage(message.Id.ToString(), messageContent));
     }
 }
