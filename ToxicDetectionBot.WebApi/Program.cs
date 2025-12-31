@@ -1,15 +1,14 @@
 using Hangfire;
-using System;
-using ToxicDetectionBot.WebApi.Configuration;
-using ToxicDetectionBot.WebApi.Services;
 using Microsoft.EntityFrameworkCore;
+using ToxicDetectionBot.WebApi.Configuration;
 using ToxicDetectionBot.WebApi.Data;
+using ToxicDetectionBot.WebApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
-var dbPath = Path.Combine(builder.Environment.ContentRootPath, "emails.db");
+var dbPath = Path.Combine(builder.Environment.ContentRootPath, $"{nameof(ToxicDetectionBot)}.db");
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
     options.UseSqlite($"Data Source={dbPath}");
@@ -75,8 +74,8 @@ using (var scope = app.Services.CreateScope())
     var bgService = scope.ServiceProvider.GetRequiredService<IBackgroundJobService>();
     var sentimentSummarizerService = scope.ServiceProvider.GetRequiredService<ISentimentSummarizerService>();
 
-    backgroundJobClient.Enqueue("ServiceLifecycle", () => bgService.StartDiscordClient());
-    recurringJobManager.AddOrUpdate("SentimentSummarizer", () => sentimentSummarizerService.SummarizeUserSentiments(), "*/5 * * * *");
+    backgroundJobClient.Enqueue("service-lifecycle", () => bgService.StartDiscordClient());
+    recurringJobManager.AddOrUpdate("sentiment-summarizer", () => sentimentSummarizerService.SummarizeUserSentiments(), "*/5 * * * *");
 }
 
 app.Run();
