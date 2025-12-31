@@ -66,7 +66,8 @@ public class DiscordService : IDiscordService
         s_client.MessageReceived += MessageReceivedAsync;
         s_client.SlashCommandExecuted += SlashCommandExecutedAsync;
 
-        await s_client.LoginAsync(TokenType.Bot, _options.Value.Token!).ConfigureAwait(false);
+        await s_client.LoginAsync(TokenType.Bot, _options.Value.Token
+            ?? throw new ArgumentNullException(nameof(_options.Value.Token))).ConfigureAwait(false);
         await s_client.StartAsync().ConfigureAwait(false);
 
         _logger.LogInformation("Discord client started.");
