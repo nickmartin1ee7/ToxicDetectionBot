@@ -1,6 +1,8 @@
 ﻿using Discord;
 using Discord.WebSocket;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using ToxicDetectionBot.WebApi.Configuration;
 using ToxicDetectionBot.WebApi.Data;
 
 namespace ToxicDetectionBot.WebApi.Services;
@@ -15,14 +17,17 @@ public class SlashCommandHandler : ISlashCommandHandler
 {
     private readonly ILogger<SlashCommandHandler> _logger;
     private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly IOptions<DiscordSettings> _discordSettings;
     private readonly Dictionary<string, Func<SocketSlashCommand, Task>> _commandHandlers;
 
     public SlashCommandHandler(
         ILogger<SlashCommandHandler> logger,
-        IServiceScopeFactory serviceScopeFactory)
+        IServiceScopeFactory serviceScopeFactory,
+        IOptions<DiscordSettings> discordSettings)
     {
         _logger = logger;
         _serviceScopeFactory = serviceScopeFactory;
+        _discordSettings = discordSettings;
         _commandHandlers = new()
         {
             ["showstats"] = HandleShowStatsAsync,
@@ -156,23 +161,35 @@ public class SlashCommandHandler : ISlashCommandHandler
         using var scope = _serviceScopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var guildUserIds = guild.Users.Select(u => u.Id.ToString()).ToHashSet();
+        var userId = command.User.Id.ToString();
+        var isAdmin = _discordSettings.Value.AdminList.Contains(userId);
 
-        var leaderboard = await dbContext.UserSentimentScores
-            .Where(s => guildUserIds.Contains(s.UserId))
+        IQueryable<UserSentimentScore> query = dbContext.UserSentimentScores;
+
+        if (!isAdmin)
+        {
+            var guildUserIds = guild.Users.Select(u => u.Id.ToString()).ToHashSet();
+            query = query.Where(s => guildUserIds.Contains(s.UserId));
+        }
+
+        var leaderboard = await query
             .OrderByDescending(s => s.ToxicityPercentage)
             .ThenByDescending(s => s.TotalMessages)
-            .Take(10)
+            .Take(isAdmin ? 50 : 10)
             .ToListAsync();
 
-        var embed = BuildLeaderboardEmbed(guild, leaderboard);
+        var embed = BuildLeaderboardEmbed(guild, leaderboard, isAdmin);
         await command.RespondAsync(embed: embed);
     }
 
-    private static Embed BuildLeaderboardEmbed(SocketGuild guild, List<UserSentimentScore> leaderboard)
+    private static Embed BuildLeaderboardEmbed(SocketGuild guild, List<UserSentimentScore> leaderboard, bool isGlobalView)
     {
+        var title = isGlobalView 
+            ? "🐍 Global Toxicity Leaderboard"
+            : $"🐍 Toxicity Leaderboard - {guild.Name}";
+
         var embed = new EmbedBuilder()
-            .WithTitle($"🐍 Toxicity Leaderboard - {guild.Name}")
+            .WithTitle(title)
             .WithColor(Color.Green)
             .WithCurrentTimestamp();
 

@@ -6,4 +6,5 @@ public class DiscordSettings
     
     public string? Token { get; set; }
     public string? JsonSchema { get; set; }
+    public List<string> AdminList { get; set; } = [];
 }
