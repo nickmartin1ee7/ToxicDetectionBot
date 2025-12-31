@@ -89,7 +89,7 @@ public class DiscordService : IDiscordService
         _logger.LogInformation("Discord client stopped.");
     }
 
-    public async Task ClassifyMessage(string messageId, string userId, string messageContent, string username, string guildName, string channelName)
+    public async Task ClassifyMessage(string messageId, string userId, string messageContent, string username, string guildId, string guildName, string channelName)
     {
         var result = _chatClient.GetResponseAsync(
             chatMessage: messageContent,
@@ -112,6 +112,7 @@ public class DiscordService : IDiscordService
         dbContext.UserSentiments.Add(new UserSentiment
         {
             UserId = userId,
+            GuildId = guildId,
             MessageId = messageId,
             MessageContent = messageContent,
             Username = username,
@@ -166,6 +167,7 @@ public class DiscordService : IDiscordService
 
         var channel = message.Channel;
         var guildChannel = channel as SocketGuildChannel;
+        var guildId = guildChannel?.Guild.Id.ToString() ?? "0";
         var guildName = guildChannel?.Guild.Name ?? "DM";
         var channelName = channel.Name ?? "Unknown";
         var username = message.Author.Username;
@@ -173,13 +175,14 @@ public class DiscordService : IDiscordService
         var messageContent = message.CleanContent;
 
         _logger.LogInformation(
-            "Message {MessageId} received from user '{Username}' (ID: {UserId}) in channel '{ChannelName}' (ID: {ChannelId}) in guild '{GuildName}'. Message: {MessageContent}",
+            "Message {MessageId} received from user '{Username}' (ID: {UserId}) in channel '{ChannelName}' (ID: {ChannelId}) in guild '{GuildName}' (ID: {GuildId}). Message: {MessageContent}",
             message.Id,
             username,
             message.Author.Id,
             channelName,
             channel.Id,
             guildName,
+            guildId,
             messageContent);
 
         using var scope = _serviceScopeFactory.CreateScope();
@@ -195,7 +198,7 @@ public class DiscordService : IDiscordService
             return;
         }
 
-        _bg.Enqueue<DiscordService>(ds => ds.ClassifyMessage(message.Id.ToString(), userId, messageContent, username, guildName, channelName));
+        _bg.Enqueue<DiscordService>(ds => ds.ClassifyMessage(message.Id.ToString(), userId, messageContent, username, guildId, guildName, channelName));
     }
 }
 

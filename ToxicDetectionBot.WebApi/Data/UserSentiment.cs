@@ -4,6 +4,7 @@ public class UserSentiment
 {
     public int Id { get; set; }
     public required string UserId { get; set; }
+    public required string GuildId { get; set; }
     public required string MessageId { get; set; }
     public required string MessageContent { get; set; }
     public required string Username { get; set; }

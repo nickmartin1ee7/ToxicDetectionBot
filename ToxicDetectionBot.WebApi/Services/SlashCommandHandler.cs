@@ -109,18 +109,30 @@ public class SlashCommandHandler : ISlashCommandHandler
             return;
         }
 
+        if (command.Channel is not SocketGuildChannel { Guild: var guild })
+        {
+            await command.RespondAsync("This command can only be used in a server.", ephemeral: true);
+            return;
+        }
+
         using var scope = _serviceScopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         var userId = user.Id.ToString();
-        var stats = await dbContext.UserSentimentScores.FirstOrDefaultAsync(s => s.UserId == userId);
+        var guildId = guild.Id.ToString();
+        
+        // Calculate guild-specific stats from UserSentiments
+        var sentiments = await dbContext.UserSentiments
+            .Where(s => s.UserId == userId && s.GuildId == guildId)
+            .ToListAsync();
+
         var optOut = await dbContext.UserOptOuts.FirstOrDefaultAsync(o => o.UserId == userId);
 
-        var embed = BuildUserStatsEmbed(user, stats, optOut);
+        var embed = BuildUserStatsEmbed(user, sentiments, optOut);
         await command.RespondAsync(embed: embed);
     }
 
-    private static Embed BuildUserStatsEmbed(SocketUser user, UserSentimentScore? stats, UserOptOut? optOut)
+    private static Embed BuildUserStatsEmbed(SocketUser user, List<UserSentiment> sentiments, UserOptOut? optOut)
     {
         var embed = new EmbedBuilder()
             .WithTitle($"Sentiment Stats for {user.Username}")
@@ -132,18 +144,24 @@ public class SlashCommandHandler : ISlashCommandHandler
         {
             embed.WithDescription("⚠️ This user has opted out of sentiment analysis.");
         }
-        else if (stats is null)
+        else if (sentiments.Count == 0)
         {
-            embed.WithDescription("No stats available for this user yet.");
+            embed.WithDescription("No stats available for this user in this server yet.");
         }
         else
         {
-            var timestamp = new DateTimeOffset(stats.SummarizedAt).ToUnixTimeSeconds();
+            var totalMessages = sentiments.Count;
+            var toxicMessages = sentiments.Count(s => s.IsToxic);
+            var nonToxicMessages = totalMessages - toxicMessages;
+            var toxicityPercentage = totalMessages > 0 ? (double)toxicMessages / totalMessages * 100 : 0;
+            var lastUpdated = sentiments.Max(s => s.CreatedAt);
+            var timestamp = new DateTimeOffset(lastUpdated).ToUnixTimeSeconds();
+            
             embed
-                .AddField("Total Messages", stats.TotalMessages.ToString(), inline: true)
-                .AddField("Toxic Messages", stats.ToxicMessages.ToString(), inline: true)
-                .AddField("Non-Toxic Messages", stats.NonToxicMessages.ToString(), inline: true)
-                .AddField("Toxicity Percentage", $"{stats.ToxicityPercentage:F2}%", inline: true)
+                .AddField("Total Messages", totalMessages.ToString(), inline: true)
+                .AddField("Toxic Messages", toxicMessages.ToString(), inline: true)
+                .AddField("Non-Toxic Messages", nonToxicMessages.ToString(), inline: true)
+                .AddField("Toxicity Percentage", $"{toxicityPercentage:F2}%", inline: true)
                 .AddField("Last Updated (UTC)", $"<t:{timestamp}:R>", inline: true);
         }
 
