@@ -1,6 +1,7 @@
 ﻿using Discord;
 using Discord.WebSocket;
 using Microsoft.EntityFrameworkCore;
+using System;
 using ToxicDetectionBot.WebApi.Data;
 
 namespace ToxicDetectionBot.WebApi.Services;
@@ -49,10 +50,12 @@ public class SlashCommandHandler : ISlashCommandHandler
                 .WithType(ApplicationCommandOptionType.String))
             .Build();
 
+        SocketGuild? currentGuild = null;
         try
         {
             foreach (var guild in client.Guilds)
             {
+                currentGuild = guild;
                 await guild.CreateApplicationCommandAsync(showStatsCommand);
                 await guild.CreateApplicationCommandAsync(showLeaderboardCommand);
                 await guild.CreateApplicationCommandAsync(optCommand);
@@ -62,7 +65,7 @@ public class SlashCommandHandler : ISlashCommandHandler
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to register slash commands");
+            _logger.LogError(ex, "Failed to register slash commands for guild {GuildName} ({GuildId}) with {GuildUserCount} users", currentGuild?.Name, currentGuild?.Id, currentGuild?.Users.Count);
         }
     }
 
