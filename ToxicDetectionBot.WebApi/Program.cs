@@ -74,7 +74,7 @@ using (var scope = app.Services.CreateScope())
     var bgService = scope.ServiceProvider.GetRequiredService<IBackgroundJobService>();
     var sentimentSummarizerService = scope.ServiceProvider.GetRequiredService<ISentimentSummarizerService>();
 
-    backgroundJobClient.Enqueue("service-lifecycle", () => bgService.StartDiscordClient());
+    backgroundJobClient.Enqueue(() => bgService.StartDiscordClient());
     recurringJobManager.AddOrUpdate("sentiment-summarizer", () => sentimentSummarizerService.SummarizeUserSentiments(), "*/5 * * * *");
 }
 
