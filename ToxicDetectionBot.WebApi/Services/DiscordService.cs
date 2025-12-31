@@ -3,6 +3,7 @@ using Discord.WebSocket;
 using Hangfire;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
+using System;
 using System.Text.Json;
 using ToxicDetectionBot.WebApi.Configuration;
 using ToxicDetectionBot.WebApi.Data;
@@ -134,8 +135,9 @@ public class DiscordService : IDiscordService
 
     private async Task ReadyAsync()
     {
-        _logger.LogInformation("Discord client is ready for {GuildCount} servers!",
-            s_client?.Guilds.Count ?? 0);
+        _logger.LogInformation("Discord client is ready for {GuildCount} servers and {GuildeUserCount} users!",
+            s_client?.Guilds.Count ?? 0,
+            s_client?.Guilds.Sum(g => g.Users.Count));
         
         if (s_client is not null)
         {
