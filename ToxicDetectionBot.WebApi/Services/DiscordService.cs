@@ -15,7 +15,7 @@ public class DiscordService : IDiscordService
     private readonly ILogger<DiscordService> _logger;
     private readonly IChatClient _chatClient;
     private readonly IOptions<DiscordSettings> _options;
-    private readonly IBackgroundJobClient _hangfireBgClient;
+    private readonly IBackgroundJobClient _bg;
     private readonly ISlashCommandHandler _slashCommandHandler;
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private static DiscordSocketClient? s_client;
@@ -30,13 +30,15 @@ public class DiscordService : IDiscordService
         IChatClient chatClient,
         IOptions<DiscordSettings> options,
         ISlashCommandHandler slashCommandHandler,
-        IServiceScopeFactory serviceScopeFactory)
+        IServiceScopeFactory serviceScopeFactory,
+         IBackgroundJobClient bg)
     {
         _logger = logger;
         _chatClient = chatClient;
         _options = options;
         _slashCommandHandler = slashCommandHandler;
         _serviceScopeFactory = serviceScopeFactory;
+        _bg = bg;
     }
 
     public bool IsRunning => s_client is not null;
@@ -188,7 +190,7 @@ public class DiscordService : IDiscordService
             return;
         }
 
-        _hangfireBgClient.Enqueue<DiscordService>(ds => ds.ClassifyMessage(message.Id.ToString(), userId, messageContent));
+        _bg.Enqueue<DiscordService>(ds => ds.ClassifyMessage(message.Id.ToString(), userId, messageContent));
     }
 }
 
