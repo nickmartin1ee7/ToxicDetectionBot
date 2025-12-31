@@ -57,7 +57,7 @@ public class SlashCommandHandler : ISlashCommandHandler
                 await guild.CreateApplicationCommandAsync(showLeaderboardCommand);
                 await guild.CreateApplicationCommandAsync(optCommand);
                 
-                _logger.LogInformation("Registered slash commands for guild {GuildName} ({GuildId})", guild.Name, guild.Id);
+                _logger.LogInformation("Registered slash commands for guild {GuildName} ({GuildId}) with {GuildUserCount} users", guild.Name, guild.Id, guild.Users.Count);
             }
         }
         catch (Exception ex)
