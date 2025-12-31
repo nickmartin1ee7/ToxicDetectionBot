@@ -4,9 +4,15 @@ namespace ToxicDetectionBot.WebApi.Services;
 
 public class DiscordService : IDiscordService
 {
-    private DiscordSocketClient? _client;
+    private static DiscordSocketClient? s_client;
+    private readonly ILogger<DiscordService> _logger;
 
-    public bool IsRunning => _client is not null;
+    public DiscordService(ILogger<DiscordService> logger)
+    {
+        _logger = logger;
+    }
+
+    public bool IsRunning => s_client is not null;
 
     public async Task StartAsync(string token, CancellationToken cancellationToken = default)
     {
@@ -15,36 +21,36 @@ public class DiscordService : IDiscordService
             throw new InvalidOperationException("Discord client is already running.");
         }
 
-        _client = new DiscordSocketClient();
+        s_client = new DiscordSocketClient();
 
-        _client.Log += LogAsync;
-        _client.Ready += ReadyAsync;
+        s_client.Log += LogAsync;
+        s_client.Ready += ReadyAsync;
 
-        await _client.LoginAsync(Discord.TokenType.Bot, token);
-        await _client.StartAsync();
+        await s_client.LoginAsync(Discord.TokenType.Bot, token);
+        await s_client.StartAsync();
     }
 
     public async Task StopAsync()
     {
-        if (_client is null)
+        if (s_client is null)
         {
             throw new InvalidOperationException("Discord client is not running.");
         }
 
-        await _client.StopAsync();
-        _client.Dispose();
-        _client = null;
+        await s_client.StopAsync();
+        s_client.Dispose();
+        s_client = null;
     }
 
     private Task LogAsync(Discord.LogMessage log)
     {
-        Console.WriteLine(log.ToString());
+        _logger.LogInformation("Discord: {Message}", log.ToString());
         return Task.CompletedTask;
     }
 
     private Task ReadyAsync()
     {
-        Console.WriteLine("Discord client is ready!");
+        _logger.LogInformation("Discord client is ready!");
         return Task.CompletedTask;
     }
 }

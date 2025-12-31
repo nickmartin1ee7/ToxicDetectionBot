@@ -24,7 +24,9 @@ public class ServiceController : ControllerBase
             var jobId = _backgroundJobService.StartDiscordClient();
             _logger.LogInformation("Discord client start requested. Job ID: {JobId}", jobId);
 
-            return Ok(new StartServiceResponse(true, jobId, "Discord client start job enqueued successfully"));
+            return Ok(new StartServiceResponse(true, jobId, string.IsNullOrEmpty(jobId)
+                ? "Discord client already running"
+                : "Discord client start job enqueued successfully"));
         }
         catch (Exception ex)
         {
