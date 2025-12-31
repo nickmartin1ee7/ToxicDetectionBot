@@ -26,7 +26,7 @@ public class SentimentSummarizerService : ISentimentSummarizerService
         using var scope = _serviceScopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        _logger.LogInformation("Starting sentiment summarization...");
+        _logger.LogDebug("Starting sentiment summarization...");
 
         var unsummarizedSentiments = await dbContext.UserSentiments
             .Where(us => !us.IsSummarized)
@@ -34,7 +34,7 @@ public class SentimentSummarizerService : ISentimentSummarizerService
 
         if (unsummarizedSentiments.Count == 0)
         {
-            _logger.LogInformation("No unsummarized sentiments found");
+            _logger.LogDebug("No unsummarized sentiments found");
             return;
         }
 
