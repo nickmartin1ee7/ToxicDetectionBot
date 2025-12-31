@@ -195,7 +195,9 @@ public class SlashCommandHandler : ISlashCommandHandler
 
         if (leaderboard.Count == 0)
         {
-            embed.WithDescription("No stats available for this server yet.");
+            embed.WithDescription(isGlobalView
+                ? "No global stats available yet."
+                : "No stats available for this server yet.");
             return embed.Build();
         }
 
