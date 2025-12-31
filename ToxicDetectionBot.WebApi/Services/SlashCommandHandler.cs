@@ -139,7 +139,7 @@ public class SlashCommandHandler : ISlashCommandHandler
                 .AddField("Toxic Messages", stats.ToxicMessages.ToString(), inline: true)
                 .AddField("Non-Toxic Messages", stats.NonToxicMessages.ToString(), inline: true)
                 .AddField("Toxicity Percentage", $"{stats.ToxicityPercentage:F2}%", inline: true)
-                .AddField("Last Updated", $"<t:{timestamp}:R>", inline: true);
+                .AddField("Last Updated (UTC)", $"<t:{timestamp}:R>", inline: true);
         }
 
         return embed.Build();
