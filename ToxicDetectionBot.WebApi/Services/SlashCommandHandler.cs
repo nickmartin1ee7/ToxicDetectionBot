@@ -120,7 +120,7 @@ public class SlashCommandHandler : ISlashCommandHandler
         var embed = new EmbedBuilder()
             .WithTitle($"Sentiment Stats for {user.Username}")
             .WithThumbnailUrl(user.GetAvatarUrl() ?? user.GetDefaultAvatarUrl())
-            .WithColor(Color.Blue)
+            .WithColor(Color.Green)
             .WithCurrentTimestamp();
 
         if (optOut?.IsOptedOut == true)
