@@ -1,10 +1,19 @@
 using Hangfire;
+using System;
 using ToxicDetectionBot.WebApi.Configuration;
 using ToxicDetectionBot.WebApi.Services;
+using Microsoft.EntityFrameworkCore;
+using ToxicDetectionBot.WebApi.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+
+var dbPath = Path.Combine(builder.Environment.ContentRootPath, "emails.db");
+builder.Services.AddDbContext<AppDbContext>(options =>
+{
+    options.UseSqlite($"Data Source={dbPath}");
+});
 
 // Add services to the container.
 builder.Services.AddProblemDetails();
@@ -47,6 +56,13 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHangfireDashboard();
+
+// Ensure database is created/migrated on startup
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.EnsureCreated();
+}
 
 // Start discord client on startup
 using (var scope = app.Services.CreateScope())

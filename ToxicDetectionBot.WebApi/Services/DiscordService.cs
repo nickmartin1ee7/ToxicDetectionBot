@@ -5,6 +5,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
 using ToxicDetectionBot.WebApi.Configuration;
+using ToxicDetectionBot.WebApi.Data;
 
 namespace ToxicDetectionBot.WebApi.Services;
 
@@ -14,6 +15,7 @@ public class DiscordService : IDiscordService
     private readonly IChatClient _chatClient;
     private readonly IOptions<DiscordSettings> _options;
     private readonly IBackgroundJobClient _hangfireBgClient;
+    private readonly AppDbContext _appDbContext;
 
     private static DiscordSocketClient? s_client;
     private static ChatOptions? s_chatOptions;
@@ -26,12 +28,14 @@ public class DiscordService : IDiscordService
         ILogger<DiscordService> logger,
         IChatClient chatClient,
         IOptions<DiscordSettings> options,
-        IBackgroundJobClient hangfireBgClient)
+        IBackgroundJobClient hangfireBgClient,
+        AppDbContext appDbContext)
     {
         _logger = logger;
         _chatClient = chatClient;
         _options = options;
         _hangfireBgClient = hangfireBgClient;
+        _appDbContext = appDbContext;
     }
 
     public bool IsRunning => s_client is not null;
@@ -80,7 +84,7 @@ public class DiscordService : IDiscordService
         _logger.LogInformation("Discord client stopped.");
     }
 
-    public async Task ClassifyMessage(string messageId, string messageContent)
+    public async Task ClassifyMessage(string messageId, string userId, string messageContent)
     {
         var result = _chatClient.GetResponseAsync(
             chatMessage: messageContent,
@@ -95,6 +99,15 @@ public class DiscordService : IDiscordService
             messageId,
             cResult,
             messageContent);
+
+        _appDbContext.UserSentiments.Add(new UserSentiment
+        {
+            UserId = userId,
+            MessageId = messageId,
+            MessageContent = messageContent,
+            IsToxic = cResult?.IsToxic ?? false
+        });
+        await _appDbContext.SaveChangesAsync();
     }
 
     private void Initialize()
@@ -146,7 +159,7 @@ public class DiscordService : IDiscordService
             guildName,
             messageContent);
 
-        _hangfireBgClient.Enqueue<DiscordService>(ds => ds.ClassifyMessage(message.Id.ToString(), messageContent));
+        _hangfireBgClient.Enqueue<DiscordService>(ds => ds.ClassifyMessage(message.Id.ToString(), message.Author.Id.ToString(), messageContent));
     }
 }
 
