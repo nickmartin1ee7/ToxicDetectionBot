@@ -1,4 +1,6 @@
 using Hangfire;
+using ToxicDetectionBot.WebApi.Configuration;
+using ToxicDetectionBot.WebApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,6 +10,13 @@ builder.AddServiceDefaults();
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
+
+// Configure Discord settings
+builder.Services.Configure<DiscordSettings>(builder.Configuration.GetSection(DiscordSettings.ConfigKey));
+
+// Add Discord and Hangfire services
+builder.Services.AddSingleton<IDiscordService, DiscordService>();
+builder.Services.AddScoped<IBackgroundJobService, BackgroundJobService>();
 
 builder.Services.AddHangfire(configuration => configuration.UseInMemoryStorage());
 builder.Services.AddHangfireServer();
