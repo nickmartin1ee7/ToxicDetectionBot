@@ -84,15 +84,6 @@ public class ServiceController : ControllerBase
             });
         }
     }
-
-    [HttpGet("status")]
-    public ActionResult<ServiceStatusResponse> Status()
-    {
-        return Ok(new ServiceStatusResponse
-        {
-            Message = "Service is running and ready"
-        });
-    }
 }
 
 public class StartServiceResponse
