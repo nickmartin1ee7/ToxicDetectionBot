@@ -50,7 +50,7 @@ public class SlashCommandHandler : ISlashCommandHandler
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex,
+                _logger.LogWarning(ex,
                     "Failed to register slash commands for guild {GuildName} ({GuildId}) with {GuildUserCount} users",
                     guild.Name, guild.Id, guild.Users.Count);
             }
