@@ -50,6 +50,14 @@ public class SlashCommandHandler : ISlashCommandHandler
             }
             catch (Exception ex)
             {
+                // Discord.Net.HttpException: The server responded with error 50001: Missing Access
+                if (ex.Message.Contains("50001"))
+                {
+                    _logger.LogWarning("Failed to register slash commands for guild {GuildName} ({GuildId}) with {GuildUserCount} users ({ErrorMessage})",
+                        guild.Name, guild.Id, guild.Users.Count, ex.Message[ex.Message.IndexOf("50001") ..]);
+                    return;
+                }
+
                 _logger.LogWarning(ex,
                     "Failed to register slash commands for guild {GuildName} ({GuildId}) with {GuildUserCount} users",
                     guild.Name, guild.Id, guild.Users.Count);
