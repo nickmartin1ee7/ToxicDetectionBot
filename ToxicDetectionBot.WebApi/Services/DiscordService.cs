@@ -16,7 +16,7 @@ public class DiscordService : IDiscordService
     private readonly IChatClient _chatClient;
     private readonly IOptions<DiscordSettings> _options;
     private readonly IBackgroundJobClient _bg;
-    private readonly ISlashCommandHandler _slashCommandHandler;
+    private readonly IDiscordCommandHandler _discordCommandHandler;
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private static DiscordSocketClient? s_client;
     private static ChatOptions? s_chatOptions;
@@ -29,14 +29,14 @@ public class DiscordService : IDiscordService
         ILogger<DiscordService> logger,
         IChatClient chatClient,
         IOptions<DiscordSettings> options,
-        ISlashCommandHandler slashCommandHandler,
+        IDiscordCommandHandler discordCommandHandler,
         IServiceScopeFactory serviceScopeFactory,
          IBackgroundJobClient bg)
     {
         _logger = logger;
         _chatClient = chatClient;
         _options = options;
-        _slashCommandHandler = slashCommandHandler;
+        _discordCommandHandler = discordCommandHandler;
         _serviceScopeFactory = serviceScopeFactory;
         _bg = bg;
     }
@@ -65,6 +65,7 @@ public class DiscordService : IDiscordService
         s_client.Ready += ReadyAsync;
         s_client.MessageReceived += MessageReceivedAsync;
         s_client.SlashCommandExecuted += SlashCommandExecutedAsync;
+        s_client.UserCommandExecuted += UserCommandExecutedAsync;
 
         await s_client.LoginAsync(TokenType.Bot, _options.Value.Token
             ?? throw new ArgumentNullException(nameof(_options.Value.Token))).ConfigureAwait(false);
@@ -149,13 +150,18 @@ public class DiscordService : IDiscordService
         
         if (s_client is not null)
         {
-            await _slashCommandHandler.RegisterCommandsAsync(s_client).ConfigureAwait(false);
+            await _discordCommandHandler.RegisterCommandsAsync(s_client).ConfigureAwait(false);
         }
     }
 
     private async Task SlashCommandExecutedAsync(SocketSlashCommand command)
     {
-        _ = _slashCommandHandler.HandleSlashCommandAsync(command).ConfigureAwait(false);
+        _ = _discordCommandHandler.HandleSlashCommandAsync(command).ConfigureAwait(false);
+    }
+
+    private async Task UserCommandExecutedAsync(SocketUserCommand command)
+    {
+        _ = _discordCommandHandler.HandleUserCommandAsync(command).ConfigureAwait(false);
     }
 
     private async Task MessageReceivedAsync(SocketMessage message)

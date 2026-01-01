@@ -7,21 +7,22 @@ using ToxicDetectionBot.WebApi.Data;
 
 namespace ToxicDetectionBot.WebApi.Services;
 
-public interface ISlashCommandHandler
+public interface IDiscordCommandHandler
 {
     Task RegisterCommandsAsync(DiscordSocketClient client);
     Task HandleSlashCommandAsync(SocketSlashCommand command);
+    Task HandleUserCommandAsync(SocketUserCommand command);
 }
 
-public class SlashCommandHandler : ISlashCommandHandler
+public class DiscordCommandHandler : IDiscordCommandHandler
 {
-    private readonly ILogger<SlashCommandHandler> _logger;
+    private readonly ILogger<DiscordCommandHandler> _logger;
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IOptions<DiscordSettings> _discordSettings;
     private readonly Dictionary<string, Func<SocketSlashCommand, Task>> _commandHandlers;
 
-    public SlashCommandHandler(
-        ILogger<SlashCommandHandler> logger,
+    public DiscordCommandHandler(
+        ILogger<DiscordCommandHandler> logger,
         IServiceScopeFactory serviceScopeFactory,
         IOptions<DiscordSettings> discordSettings)
     {
@@ -39,7 +40,8 @@ public class SlashCommandHandler : ISlashCommandHandler
     public async Task RegisterCommandsAsync(DiscordSocketClient client)
     {
         var commands = BuildSlashCommands();
-        _ = Task.Run(async () => await client.BulkOverwriteGlobalApplicationCommandsAsync(commands));
+        var userCommands = BuildUserCommands();
+        _ = Task.Run(async () => await client.BulkOverwriteGlobalApplicationCommandsAsync([.. commands, .. userCommands]));
     }
 
     public async Task HandleSlashCommandAsync(SocketSlashCommand command)
@@ -75,6 +77,41 @@ public class SlashCommandHandler : ISlashCommandHandler
         }
     }
 
+    public async Task HandleUserCommandAsync(SocketUserCommand command)
+    {
+        try
+        {
+            _logger.LogInformation(
+                "Handling user command {CommandName} from user {Username} ({UserId}) targeting {TargetUsername} ({TargetUserId}) in channel {ChannelName} ({ChannelId} in {GuildId})",
+                command.Data.Name,
+                command.User.Username,
+                command.User.Id,
+                command.Data.Member.Username,
+                command.Data.Member.Id,
+                command.Channel.Name,
+                command.Channel.Id,
+                command.GuildId);
+
+            if (command.Data.Name == "Show Stats")
+            {
+                _ = Task.Run(async () => await HandleShowStatsUserCommandAsync(command));
+            }
+            else
+            {
+                _logger.LogWarning("Received unknown user command {CommandName}", command.Data.Name);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error handling user command {CommandName}", command.Data.Name);
+
+            if (!command.HasResponded)
+            {
+                await command.RespondAsync("An error occurred while processing your command.", ephemeral: true);
+            }
+        }
+    }
+
     private static SlashCommandProperties[] BuildSlashCommands() =>
     [
         new SlashCommandBuilder()
@@ -100,6 +137,40 @@ public class SlashCommandHandler : ISlashCommandHandler
                 .WithType(ApplicationCommandOptionType.String))
             .Build()
     ];
+
+    private static ApplicationCommandProperties[] BuildUserCommands() =>
+    [
+        new UserCommandBuilder()
+            .WithName("Show Stats")
+            .Build()
+    ];
+
+    private async Task HandleShowStatsUserCommandAsync(SocketUserCommand command)
+    {
+        var user = command.Data.Member;
+
+        if (command.Channel is not SocketGuildChannel { Guild: var guild })
+        {
+            await command.RespondAsync("This command can only be used in a server.", ephemeral: true);
+            return;
+        }
+
+        using var scope = _serviceScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var userId = user.Id.ToString();
+        var guildId = guild.Id.ToString();
+        
+        // Calculate guild-specific stats from UserSentiments
+        var sentiments = await dbContext.UserSentiments
+            .Where(s => s.UserId == userId && s.GuildId == guildId)
+            .ToListAsync();
+
+        var optOut = await dbContext.UserOptOuts.FirstOrDefaultAsync(o => o.UserId == userId);
+
+        var embed = BuildUserStatsEmbed(user, sentiments, optOut);
+        await command.RespondAsync(embed: embed);
+    }
 
     private async Task HandleShowStatsAsync(SocketSlashCommand command)
     {
