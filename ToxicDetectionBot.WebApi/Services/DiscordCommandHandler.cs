@@ -20,6 +20,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IOptions<DiscordSettings> _discordSettings;
     private readonly Dictionary<string, Func<SocketSlashCommand, Task>> _commandHandlers;
+    private readonly Dictionary<string, Func<SocketUserCommand, Task>> _userCommandHandlers;
 
     public DiscordCommandHandler(
         ILogger<DiscordCommandHandler> logger,
@@ -34,6 +35,10 @@ public class DiscordCommandHandler : IDiscordCommandHandler
             ["showstats"] = HandleShowStatsAsync,
             ["showleaderboard"] = HandleShowLeaderboardAsync,
             ["opt"] = HandleOptAsync
+        };
+        _userCommandHandlers = new()
+        {
+            ["Show Stats"] = HandleShowStatsUserCommandAsync
         };
     }
 
@@ -81,20 +86,20 @@ public class DiscordCommandHandler : IDiscordCommandHandler
     {
         try
         {
-            _logger.LogInformation(
-                "Handling user command {CommandName} from user {Username} ({UserId}) targeting {TargetUsername} ({TargetUserId}) in channel {ChannelName} ({ChannelId} in {GuildId})",
-                command.Data.Name,
-                command.User.Username,
-                command.User.Id,
-                command.Data.Member.Username,
-                command.Data.Member.Id,
-                command.Channel.Name,
-                command.Channel.Id,
-                command.GuildId);
-
-            if (command.Data.Name == "Show Stats")
+            if (_userCommandHandlers.TryGetValue(command.Data.Name, out var handler))
             {
-                _ = Task.Run(async () => await HandleShowStatsUserCommandAsync(command));
+                _logger.LogInformation(
+                    "Handling user command {CommandName} from user {Username} ({UserId}) targeting {TargetUsername} ({TargetUserId}) in channel {ChannelName} ({ChannelId} in {GuildId})",
+                    command.Data.Name,
+                    command.User.Username,
+                    command.User.Id,
+                    command.Data.Member.Username,
+                    command.Data.Member.Id,
+                    command.Channel.Name,
+                    command.Channel.Id,
+                    command.GuildId);
+
+                _ = Task.Run(async () => await handler(command));
             }
             else
             {
