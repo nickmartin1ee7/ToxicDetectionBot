@@ -8,4 +8,5 @@ public class DiscordSettings
     public string? JsonSchema { get; set; }
     public List<string> AdminList { get; set; } = [];
     public int RetentionInDays { get; set; } = 28;
+    public string? FeedbackWebhookUrl { get; set; }
 }

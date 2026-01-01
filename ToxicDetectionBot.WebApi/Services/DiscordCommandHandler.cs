@@ -19,22 +19,26 @@ public class DiscordCommandHandler : IDiscordCommandHandler
     private readonly ILogger<DiscordCommandHandler> _logger;
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IOptions<DiscordSettings> _discordSettings;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly Dictionary<string, Func<SocketSlashCommand, Task>> _commandHandlers;
     private readonly Dictionary<string, Func<SocketUserCommand, Task>> _userCommandHandlers;
 
     public DiscordCommandHandler(
         ILogger<DiscordCommandHandler> logger,
         IServiceScopeFactory serviceScopeFactory,
-        IOptions<DiscordSettings> discordSettings)
+        IOptions<DiscordSettings> discordSettings,
+        IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
         _serviceScopeFactory = serviceScopeFactory;
         _discordSettings = discordSettings;
+        _httpClientFactory = httpClientFactory;
         _commandHandlers = new()
         {
             ["showstats"] = HandleShowStatsAsync,
             ["showleaderboard"] = HandleShowLeaderboardAsync,
-            ["opt"] = HandleOptAsync
+            ["opt"] = HandleOptAsync,
+            ["feedback"] = HandleFeedbackAsync
         };
         _userCommandHandlers = new()
         {
@@ -140,6 +144,12 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                 .AddChoice("Out", "out")
                 .AddChoice("In", "in")
                 .WithType(ApplicationCommandOptionType.String))
+            .Build(),
+
+        new SlashCommandBuilder()
+            .WithName("feedback")
+            .WithDescription("Send feedback to the developer")
+            .AddOption("message", ApplicationCommandOptionType.String, "Your feedback message", isRequired: true, minLength: 10, maxLength: 1000)
             .Build()
     ];
 
@@ -394,5 +404,82 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         _logger.LogInformation(
             "User {UserId} ({Username}) opted {OptStatus} of sentiment analysis",
             userId, command.User.Username, isOptingOut ? "OUT" : "IN");
+    }
+
+    private async Task HandleFeedbackAsync(SocketSlashCommand command)
+    {
+        if (command.Data.Options.FirstOrDefault()?.Value is not string message)
+        {
+            await command.RespondAsync("Please provide a feedback message.", ephemeral: true);
+            return;
+        }
+
+        var webhookUrl = _discordSettings.Value.FeedbackWebhookUrl;
+        
+        if (string.IsNullOrWhiteSpace(webhookUrl))
+        {
+            _logger.LogWarning("Feedback command used but FeedbackWebhookUrl is not configured");
+            await command.RespondAsync("Feedback system is not configured. Please contact the administrator.", ephemeral: true);
+            return;
+        }
+
+        try
+        {
+            var guildName = command.Channel is SocketGuildChannel { Guild: var guild } 
+                ? guild.Name 
+                : "DM";
+            
+            var embed = new
+            {
+                embeds = new[]
+                {
+                    new
+                    {
+                        title = "📬 New Feedback",
+                        description = message,
+                        color = 0x5865F2, // Discord blurple
+                        fields = new[]
+                        {
+                            new { name = "User", value = $"{command.User.Username} ({command.User.Id})", inline = true },
+                            new { name = "Server", value = guildName, inline = true },
+                            new { name = "Channel", value = command.Channel.Name, inline = true }
+                        },
+                        timestamp = DateTimeOffset.UtcNow.ToString("o")
+                    }
+                }
+            };
+
+            var httpClient = _httpClientFactory.CreateClient();
+            var response = await httpClient.PostAsJsonAsync(webhookUrl, embed);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                await command.RespondAsync("✅ Thank you for your feedback! Your message has been sent to the developer.", ephemeral: true);
+                
+                _logger.LogInformation(
+                    "Feedback submitted by user {UserId} ({Username}) from server {GuildName}: {Message}",
+                    command.User.Id,
+                    command.User.Username,
+                    guildName,
+                    message);
+            }
+            else
+            {
+                _logger.LogError(
+                    "Failed to send feedback webhook. Status: {StatusCode}, Response: {Response}",
+                    response.StatusCode,
+                    await response.Content.ReadAsStringAsync());
+                
+                await command.RespondAsync("❌ Failed to send feedback. Please try again later.", ephemeral: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending feedback from user {UserId} ({Username})", 
+                command.User.Id, 
+                command.User.Username);
+            
+            await command.RespondAsync("❌ An error occurred while sending feedback. Please try again later.", ephemeral: true);
+        }
     }
 }
