@@ -16,6 +16,8 @@ public interface IDiscordCommandHandler
 
 public class DiscordCommandHandler : IDiscordCommandHandler
 {
+    private const uint BrandColor = 0x83b670;
+    
     private readonly ILogger<DiscordCommandHandler> _logger;
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IOptions<DiscordSettings> _discordSettings;
@@ -223,7 +225,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         var embed = new EmbedBuilder()
             .WithTitle($"Sentiment Stats for {user.Username}")
             .WithThumbnailUrl(user.GetAvatarUrl() ?? user.GetDefaultAvatarUrl())
-            .WithColor(Color.Green)
+            .WithColor(BrandColor)
             .WithCurrentTimestamp();
 
         if (optOut?.IsOptedOut == true)
@@ -310,7 +312,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
 
         var embed = new EmbedBuilder()
             .WithTitle(title)
-            .WithColor(Color.Green)
+            .WithColor(BrandColor)
             .WithCurrentTimestamp();
 
         if (leaderboard.Count == 0)
@@ -437,7 +439,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                     {
                         title = "📬 New Feedback",
                         description = message,
-                        color = 0x5865F2, // Discord blurple
+                        color = BrandColor,
                         fields = new[]
                         {
                             new { name = "User", value = $"{command.User.Username} ({command.User.Id})", inline = true },
