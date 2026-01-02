@@ -3,6 +3,7 @@ using Discord.WebSocket;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
+using System.Diagnostics;
 using System.Text.Json;
 using ToxicDetectionBot.WebApi.Configuration;
 using ToxicDetectionBot.WebApi.Data;
@@ -28,6 +29,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
     private readonly Dictionary<string, Func<SocketSlashCommand, Task>> _commandHandlers;
     private readonly Dictionary<string, Func<SocketUserCommand, Task>> _userCommandHandlers;
     private readonly ChatOptions? _chatOptions;
+    private readonly ChatClientMetadata? _metadata;
 
     private JsonDocument SchemaDoc =>
         JsonDocument.Parse(_discordSettings.Value.JsonSchema
@@ -67,6 +69,8 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                 schemaName: "SentimentAnalysisResult",
                 schemaDescription: "Schema to classify a message's sentiment. IsToxic: False represents that the message was toxic/mean. True represents that the message was nice/polite.")
         };
+
+        _metadata = _chatClient.GetService<ChatClientMetadata>();
     }
 
     public async Task RegisterCommandsAsync(DiscordSocketClient client)
@@ -553,21 +557,25 @@ public class DiscordCommandHandler : IDiscordCommandHandler
 
         try
         {
+            var sw = new Stopwatch();
+            sw.Start();
             var result = await _chatClient.GetResponseAsync(
                 chatMessage: message,
                 options: _chatOptions);
+            sw.Stop();
 
             var resultText = result.Text.Trim();
             var classificationResult = JsonSerializer.Deserialize<ClassificationResult>(resultText);
-
             var embedColor = classificationResult?.IsToxic == true ? 0xFF6B6Bu : BrandColor;
+            var model = _metadata?.DefaultModelId ?? "Unknown Model";
 
             var embed = new EmbedBuilder()
                 .WithTitle("🔍 Toxicity Check Result")
-                .WithDescription($"**Message:** {message}")
+                .WithDescription($"**Message:**{Environment.NewLine}{message}")
                 .WithColor(embedColor)
-                .AddField("Classification", classificationResult?.IsToxic == true ? "🐍 Toxic" : "😇 Nice", inline: true)
-                .WithFooter("This check does not count against any user's stats")
+                .AddField("Sentiment", classificationResult?.IsToxic == true ? "🐍 Toxic" : "😇 Nice", inline: true)
+                .AddField("Model", $"Text evaluated with {model}.", inline: true)
+                .WithFooter($"Completed in {sw.ElapsedMilliseconds} ms.")
                 .WithCurrentTimestamp()
                 .Build();
 
