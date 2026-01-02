@@ -1,7 +1,9 @@
 ﻿using Discord;
 using Discord.WebSocket;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 using ToxicDetectionBot.WebApi.Configuration;
 using ToxicDetectionBot.WebApi.Data;
 
@@ -22,29 +24,48 @@ public class DiscordCommandHandler : IDiscordCommandHandler
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IOptions<DiscordSettings> _discordSettings;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IChatClient _chatClient;
     private readonly Dictionary<string, Func<SocketSlashCommand, Task>> _commandHandlers;
     private readonly Dictionary<string, Func<SocketUserCommand, Task>> _userCommandHandlers;
+    private readonly ChatOptions? _chatOptions;
+
+    private JsonDocument SchemaDoc => 
+        JsonDocument.Parse(_discordSettings.Value.JsonSchema
+            ?? throw new ArgumentNullException(nameof(_discordSettings.Value.JsonSchema)));
 
     public DiscordCommandHandler(
         ILogger<DiscordCommandHandler> logger,
         IServiceScopeFactory serviceScopeFactory,
         IOptions<DiscordSettings> discordSettings,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        IChatClient chatClient)
     {
         _logger = logger;
         _serviceScopeFactory = serviceScopeFactory;
         _discordSettings = discordSettings;
         _httpClientFactory = httpClientFactory;
+        _chatClient = chatClient;
         _commandHandlers = new()
         {
             ["showstats"] = HandleShowStatsAsync,
             ["showleaderboard"] = HandleShowLeaderboardAsync,
             ["opt"] = HandleOptAsync,
-            ["feedback"] = HandleFeedbackAsync
+            ["feedback"] = HandleFeedbackAsync,
+            ["check"] = HandleCheckAsync
         };
         _userCommandHandlers = new()
         {
             ["Show Stats"] = HandleShowStatsUserCommandAsync
+        };
+
+        _chatOptions ??= new ChatOptions
+        {
+            Instructions = _discordSettings.Value.SentimentSystemPrompt
+                ?? throw new ArgumentNullException(nameof(_discordSettings.Value.SentimentSystemPrompt)),
+            ResponseFormat = ChatResponseFormat.ForJsonSchema(
+                SchemaDoc.RootElement,
+                schemaName: "SentimentAnalysisResult",
+                schemaDescription: "Schema to classify a message's sentiment. IsToxic: False represents that the message was toxic/mean. True represents that the message was nice/polite.")
         };
     }
 
@@ -152,6 +173,12 @@ public class DiscordCommandHandler : IDiscordCommandHandler
             .WithName("feedback")
             .WithDescription("Send feedback to the developer")
             .AddOption("message", ApplicationCommandOptionType.String, "Your feedback message", isRequired: true, minLength: 10, maxLength: 1000)
+            .Build(),
+
+        new SlashCommandBuilder()
+            .WithName("check")
+            .WithDescription("Check if a message would be considered toxic (doesn't count against anyone)")
+            .AddOption("message", ApplicationCommandOptionType.String, "The message to check", isRequired: true, minLength: 1, maxLength: 2000)
             .Build()
     ];
 
@@ -482,6 +509,55 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                 command.User.Username);
             
             await command.RespondAsync("❌ An error occurred while sending feedback. Please try again later.", ephemeral: true);
+        }
+    }
+
+    private async Task HandleCheckAsync(SocketSlashCommand command)
+    {
+        if (command.Data.Options.FirstOrDefault()?.Value is not string message)
+        {
+            await command.RespondAsync("Please provide a message to check.", ephemeral: true);
+            return;
+        }
+
+        await command.DeferAsync(ephemeral: true);
+
+        try
+        {
+            var result = await _chatClient.GetResponseAsync(
+                chatMessage: message,
+                options: _chatOptions);
+
+            var resultText = result.Text.Trim();
+            var classificationResult = JsonSerializer.Deserialize<ClassificationResult>(resultText);
+
+            var embedColor = classificationResult?.IsToxic == true ? 0xFF6B6Bu : BrandColor;
+
+            var embed = new EmbedBuilder()
+                .WithTitle("🔍 Toxicity Check Result")
+                .WithDescription($"**Message:** {message}")
+                .WithColor(embedColor)
+                .AddField("Classification", classificationResult?.IsToxic == true ? "🐍 Toxic" : "😇 Nice", inline: true)
+                .WithFooter("This check does not count against any user's stats")
+                .WithCurrentTimestamp()
+                .Build();
+
+            await command.FollowupAsync(embed: embed, ephemeral: true);
+
+            _logger.LogInformation(
+                "Check command used by user {UserId} ({Username}). Message: '{Message}', Result: {IsToxic}",
+                command.User.Id,
+                command.User.Username,
+                message,
+                classificationResult?.IsToxic ?? false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking message toxicity for user {UserId} ({Username})",
+                command.User.Id,
+                command.User.Username);
+
+            await command.FollowupAsync("❌ An error occurred while checking the message. Please try again later.", ephemeral: true);
         }
     }
 }
