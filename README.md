@@ -168,7 +168,7 @@ Privacy preferences:
 The bot uses Microsoft's `IChatClient` abstraction with Ollama backend:
 
 - **Model Purpose**: Sentiment analysis and classification
-- **Instructions**: "Evaluate and classify the user sentiment of the message."
+- **Instructions**: Configurable via `SentimentSystemPrompt` setting
 - **Response Format**: Structured JSON conforming to a predefined schema
 - **Schema**: `{ "IsToxic": boolean }`
 
@@ -228,20 +228,31 @@ Key settings in `appsettings.json`:
 ```json
 {
   "DiscordSettings": {
-    "Token": "",                    // Discord bot token
-    "JsonSchema": "...",            // AI response schema
-    "AdminList": [],                // Array of Discord user IDs with admin privileges
-    "RetentionInDays": 28           // Data retention period
+    "Token": "",                           // Discord bot token
+    "JsonSchema": "...",                   // AI response schema definition
+    "SentimentSystemPrompt": "",           // System prompt for AI sentiment analysis
+    "AdminList": [],                       // Array of Discord user IDs with admin privileges
+    "RetentionInDays": 28,                 // Data retention period in days
+    "FeedbackWebhookUrl": ""               // Optional Discord webhook URL for feedback
   }
 }
 ```
+
+### Configuration Details
+
+- **Token**: Your Discord bot token from the Discord Developer Portal
+- **JsonSchema**: JSON schema defining the structure of AI responses (must include `IsToxic` boolean property)
+- **SentimentSystemPrompt**: Instructions for the AI model on how to evaluate message sentiment (e.g., "Evaluate and classify the user sentiment of the message whether it is toxic, rude, or mean")
+- **AdminList**: List of Discord user IDs (as strings) that have elevated privileges
+- **RetentionInDays**: Number of days to retain sentiment data before automatic deletion (default: 28)
+- **FeedbackWebhookUrl**: Optional webhook URL for sending feedback or notifications
 
 ## Data Flow
 
 1. **Message Reception** → Discord Gateway Event
 2. **User Validation** → Opt-out check
 3. **Job Enqueue** → Hangfire background job
-4. **AI Classification** → Ollama LLM evaluation
+4. **AI Classification** → Ollama LLM evaluation using configured system prompt
 5. **Storage** → SQLite database via EF Core
 6. **Summarization** → Periodic aggregation (every minute)
 7. **Retention** → Old data purge (every 10 minutes)
@@ -269,3 +280,4 @@ Key settings in `appsettings.json`:
 - **Data Minimization**: Automatic purging of old data
 - **Observability**: Extensive logging for debugging and monitoring
 - **Modular Design**: Clear separation of concerns across services
+- **Configurable AI**: System prompts can be customized without code changes
