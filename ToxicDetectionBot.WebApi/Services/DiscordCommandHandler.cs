@@ -574,8 +574,8 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                 .WithDescription($"**Message:**{Environment.NewLine}{message}")
                 .WithColor(embedColor)
                 .AddField("Sentiment", classificationResult?.IsToxic == true ? "🐍 Toxic" : "😇 Nice", inline: true)
-                .AddField("Model", $"Text evaluated with {model}.", inline: true)
-                .WithFooter($"Completed in {sw.ElapsedMilliseconds} ms.")
+                .AddField("Model", $"Text evaluated with `{model}`.", inline: true)
+                .WithFooter($"Completed in `{sw.ElapsedMilliseconds} ms`.")
                 .WithCurrentTimestamp()
                 .Build();
 
