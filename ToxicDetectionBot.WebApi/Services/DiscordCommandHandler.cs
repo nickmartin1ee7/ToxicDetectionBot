@@ -214,7 +214,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
 
         new SlashCommandBuilder()
             .WithName("check")
-            .WithDescription("Check if a message would be considered toxic (doesn't count against anyone)")
+            .WithDescription("Check if a message would be considered toxic")
             .AddOption("message", ApplicationCommandOptionType.String, "The message to check", isRequired: true, minLength: 1, maxLength: 2000)
             .Build()
     ];
