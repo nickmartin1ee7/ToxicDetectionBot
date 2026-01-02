@@ -95,7 +95,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                     {
                         await guild.BulkOverwriteApplicationCommandAsync([.. allCommands.Select(x =>
                         {
-                            x.Name = $"debug-{x.Name}";
+                            x.Name = $"{x.Name}-debug";
                             return x;
                         })]);
                         _logger.LogInformation("Successfully registered commands to debug guild {GuildId} ({GuildName})", debugGuildId, guild.Name);
