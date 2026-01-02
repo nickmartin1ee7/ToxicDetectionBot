@@ -82,7 +82,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         // Register globally
         _ = Task.Run(async () => await client.BulkOverwriteGlobalApplicationCommandsAsync(allCommands));
 
-        // Additionally register to debug guild if configured
+        // Additionally register debug commands to debug guild if configured
         if (_discordSettings.Value.DebugGuildId.HasValue)
         {
             var debugGuildId = _discordSettings.Value.DebugGuildId.Value;
@@ -93,12 +93,14 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                     var guild = client.GetGuild(debugGuildId);
                     if (guild != null)
                     {
-                        await guild.BulkOverwriteApplicationCommandAsync([.. allCommands.Select(x =>
-                        {
-                            x.Name = $"{x.Name}-debug";
-                            return x;
-                        })]);
-                        _logger.LogInformation("Successfully registered commands to debug guild {GuildId} ({GuildName})", debugGuildId, guild.Name);
+                        // Build debug versions with -debug suffix
+                        var debugCommands = BuildSlashCommands("-debug");
+                        var debugUserCommands = BuildUserCommands("-debug");
+                        ApplicationCommandProperties[] allDebugCommands = [.. debugCommands, .. debugUserCommands];
+                        
+                        await guild.BulkOverwriteApplicationCommandAsync(allDebugCommands);
+                        _logger.LogInformation("Successfully registered {Count} debug commands to debug guild {GuildId} ({GuildName})", 
+                            allDebugCommands.Length, debugGuildId, guild.Name);
                     }
                     else
                     {
@@ -117,7 +119,12 @@ public class DiscordCommandHandler : IDiscordCommandHandler
     {
         try
         {
-            if (_commandHandlers.TryGetValue(command.Data.Name, out var handler))
+            // Strip -debug suffix to get the base command name
+            var commandName = command.Data.Name.EndsWith("-debug", StringComparison.OrdinalIgnoreCase)
+                ? command.Data.Name[..^6]
+                : command.Data.Name;
+
+            if (_commandHandlers.TryGetValue(commandName, out var handler))
             {
                 _logger.LogInformation(
                     "Handling slash command {CommandName} from user {Username} ({UserId}) in channel {ChannelName} ({ChannelId} in {GuildId})",
@@ -150,7 +157,12 @@ public class DiscordCommandHandler : IDiscordCommandHandler
     {
         try
         {
-            if (_userCommandHandlers.TryGetValue(command.Data.Name, out var handler))
+            // Strip -debug suffix to get the base command name
+            var commandName = command.Data.Name.EndsWith("-debug", StringComparison.OrdinalIgnoreCase)
+                ? command.Data.Name[..^6]
+                : command.Data.Name;
+
+            if (_userCommandHandlers.TryGetValue(commandName, out var handler))
             {
                 _logger.LogInformation(
                     "Handling user command {CommandName} from user {Username} ({UserId}) targeting {TargetUsername} ({TargetUserId}) in channel {ChannelName} ({ChannelId} in {GuildId})",
@@ -181,21 +193,21 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         }
     }
 
-    private static SlashCommandProperties[] BuildSlashCommands() =>
+    private static SlashCommandProperties[] BuildSlashCommands(string suffix = "") =>
     [
         new SlashCommandBuilder()
-            .WithName("showstats")
+            .WithName($"showstats{suffix}")
             .WithDescription("Show sentiment stats for a user")
             .AddOption("user", ApplicationCommandOptionType.User, "The user to show stats for", isRequired: true)
             .Build(),
 
         new SlashCommandBuilder()
-            .WithName("showleaderboard")
+            .WithName($"showleaderboard{suffix}")
             .WithDescription("Show the toxicity leaderboard for this server")
             .Build(),
 
         new SlashCommandBuilder()
-            .WithName("opt")
+            .WithName($"opt{suffix}")
             .WithDescription("Opt in or out of sentiment analysis")
             .AddOption(new SlashCommandOptionBuilder()
                 .WithName("choice")
@@ -207,22 +219,22 @@ public class DiscordCommandHandler : IDiscordCommandHandler
             .Build(),
 
         new SlashCommandBuilder()
-            .WithName("feedback")
+            .WithName($"feedback{suffix}")
             .WithDescription("Send feedback to the developer")
             .AddOption("message", ApplicationCommandOptionType.String, "Your feedback message", isRequired: true, minLength: 10, maxLength: 1000)
             .Build(),
 
         new SlashCommandBuilder()
-            .WithName("check")
+            .WithName($"check{suffix}")
             .WithDescription("Check if a message would be considered toxic")
             .AddOption("message", ApplicationCommandOptionType.String, "The message to check", isRequired: true, minLength: 1, maxLength: 2000)
             .Build()
     ];
 
-    private static ApplicationCommandProperties[] BuildUserCommands() =>
+    private static ApplicationCommandProperties[] BuildUserCommands(string suffix = "") =>
     [
         new UserCommandBuilder()
-            .WithName("Show Stats")
+            .WithName($"Show Stats{suffix}")
             .Build()
     ];
 
