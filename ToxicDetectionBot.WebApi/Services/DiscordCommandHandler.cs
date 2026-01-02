@@ -19,7 +19,7 @@ public interface IDiscordCommandHandler
 public class DiscordCommandHandler : IDiscordCommandHandler
 {
     private const uint BrandColor = 0x83b670;
-    
+
     private readonly ILogger<DiscordCommandHandler> _logger;
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IOptions<DiscordSettings> _discordSettings;
@@ -29,7 +29,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
     private readonly Dictionary<string, Func<SocketUserCommand, Task>> _userCommandHandlers;
     private readonly ChatOptions? _chatOptions;
 
-    private JsonDocument SchemaDoc => 
+    private JsonDocument SchemaDoc =>
         JsonDocument.Parse(_discordSettings.Value.JsonSchema
             ?? throw new ArgumentNullException(nameof(_discordSettings.Value.JsonSchema)));
 
@@ -73,7 +73,36 @@ public class DiscordCommandHandler : IDiscordCommandHandler
     {
         var commands = BuildSlashCommands();
         var userCommands = BuildUserCommands();
-        _ = Task.Run(async () => await client.BulkOverwriteGlobalApplicationCommandsAsync([.. commands, .. userCommands]));
+        ApplicationCommandProperties[] allCommands = [.. commands, .. userCommands];
+
+        // Register globally
+        _ = Task.Run(async () => await client.BulkOverwriteGlobalApplicationCommandsAsync(allCommands));
+
+        // Additionally register to debug guild if configured
+        if (_discordSettings.Value.DebugGuildId.HasValue)
+        {
+            var debugGuildId = _discordSettings.Value.DebugGuildId.Value;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var guild = client.GetGuild(debugGuildId);
+                    if (guild != null)
+                    {
+                        await guild.BulkOverwriteApplicationCommandAsync(allCommands);
+                        _logger.LogInformation("Successfully registered commands to debug guild {GuildId} ({GuildName})", debugGuildId, guild.Name);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Debug guild {GuildId} not found", debugGuildId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to register commands to debug guild {GuildId}", debugGuildId);
+                }
+            });
+        }
     }
 
     public async Task HandleSlashCommandAsync(SocketSlashCommand command)
@@ -204,7 +233,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
 
         var userId = user.Id.ToString();
         var guildId = guild.Id.ToString();
-        
+
         // Calculate guild-specific stats from UserSentiments
         var sentiments = await dbContext.UserSentiments
             .Where(s => s.UserId == userId && s.GuildId == guildId)
@@ -235,7 +264,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
 
         var userId = user.Id.ToString();
         var guildId = guild.Id.ToString();
-        
+
         // Calculate guild-specific stats from UserSentiments
         var sentiments = await dbContext.UserSentiments
             .Where(s => s.UserId == userId && s.GuildId == guildId)
@@ -271,7 +300,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
             var toxicityPercentage = totalMessages > 0 ? (double)toxicMessages / totalMessages * 100 : 0;
             var lastUpdated = sentiments.Max(s => s.CreatedAt);
             var timestamp = new DateTimeOffset(lastUpdated).ToUnixTimeSeconds();
-            
+
             embed
                 .AddField("Total Messages", totalMessages.ToString(), inline: true)
                 .AddField("Toxic Messages", toxicMessages.ToString(), inline: true)
@@ -333,7 +362,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
 
     private static Embed BuildLeaderboardEmbed(SocketGuild guild, List<UserSentimentScore> leaderboard, bool isGlobalView, Dictionary<string, UserSentiment?>? sentimentDetails = null)
     {
-        var title = isGlobalView 
+        var title = isGlobalView
             ? "🐍 Global Toxicity Leaderboard"
             : $"🐍 Toxicity Leaderboard - {guild.Name}";
 
@@ -353,7 +382,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         var description = string.Join('\n', leaderboard.Select((stat, index) =>
         {
             var medal = GetRankMedal(index);
-            
+
             if (isGlobalView && sentimentDetails?.TryGetValue(stat.UserId, out var sentiment) == true && sentiment != null)
             {
                 return $"{medal} **{sentiment.Username}** (Guild: {sentiment.GuildName}, Channel: {sentiment.ChannelName}) - {stat.ToxicityPercentage:F2}% toxic ({stat.ToxicMessages}/{stat.TotalMessages} messages)";
@@ -444,7 +473,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         }
 
         var webhookUrl = _discordSettings.Value.FeedbackWebhookUrl;
-        
+
         if (string.IsNullOrWhiteSpace(webhookUrl))
         {
             _logger.LogWarning("Feedback command used but FeedbackWebhookUrl is not configured");
@@ -454,10 +483,10 @@ public class DiscordCommandHandler : IDiscordCommandHandler
 
         try
         {
-            var guildName = command.Channel is SocketGuildChannel { Guild: var guild } 
-                ? guild.Name 
+            var guildName = command.Channel is SocketGuildChannel { Guild: var guild }
+                ? guild.Name
                 : "DM";
-            
+
             var embed = new
             {
                 embeds = new[]
@@ -480,11 +509,11 @@ public class DiscordCommandHandler : IDiscordCommandHandler
 
             var httpClient = _httpClientFactory.CreateClient();
             var response = await httpClient.PostAsJsonAsync(webhookUrl, embed);
-            
+
             if (response.IsSuccessStatusCode)
             {
                 await command.RespondAsync("✅ Thank you for your feedback! Your message has been sent to the developer.", ephemeral: true);
-                
+
                 _logger.LogInformation(
                     "Feedback submitted by user {UserId} ({Username}) from server {GuildName}: {Message}",
                     command.User.Id,
@@ -498,16 +527,16 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                     "Failed to send feedback webhook. Status: {StatusCode}, Response: {Response}",
                     response.StatusCode,
                     await response.Content.ReadAsStringAsync());
-                
+
                 await command.RespondAsync("❌ Failed to send feedback. Please try again later.", ephemeral: true);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error sending feedback from user {UserId} ({Username})", 
-                command.User.Id, 
+            _logger.LogError(ex, "Error sending feedback from user {UserId} ({Username})",
+                command.User.Id,
                 command.User.Username);
-            
+
             await command.RespondAsync("❌ An error occurred while sending feedback. Please try again later.", ephemeral: true);
         }
     }

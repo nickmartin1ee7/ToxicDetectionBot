@@ -10,4 +10,5 @@ public class DiscordSettings
     public List<string> AdminList { get; set; } = [];
     public int RetentionInDays { get; set; } = 28;
     public string? FeedbackWebhookUrl { get; set; }
+    public ulong? DebugGuildId { get; set; }
 }
