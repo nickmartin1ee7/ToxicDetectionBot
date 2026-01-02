@@ -1,6 +1,7 @@
 using Discord;
 using Discord.WebSocket;
 using Hangfire;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using System;
@@ -18,6 +19,7 @@ public class DiscordService : IDiscordService
     private readonly IBackgroundJobClient _bg;
     private readonly IDiscordCommandHandler _discordCommandHandler;
     private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly IFeedbackBridgeService _feedbackBridgeService;
     private static DiscordSocketClient? s_client;
     private static ChatOptions? s_chatOptions;
 
@@ -31,13 +33,15 @@ public class DiscordService : IDiscordService
         IOptions<DiscordSettings> options,
         IDiscordCommandHandler discordCommandHandler,
         IServiceScopeFactory serviceScopeFactory,
-         IBackgroundJobClient bg)
+        IFeedbackBridgeService feedbackBridgeService,
+        IBackgroundJobClient bg)
     {
         _logger = logger;
         _chatClient = chatClient;
         _options = options;
         _discordCommandHandler = discordCommandHandler;
         _serviceScopeFactory = serviceScopeFactory;
+        _feedbackBridgeService = feedbackBridgeService;
         _bg = bg;
     }
 
@@ -54,7 +58,7 @@ public class DiscordService : IDiscordService
 
         var config = new DiscordSocketConfig
         {
-            GatewayIntents = GatewayIntents.Guilds | GatewayIntents.GuildMessages | GatewayIntents.MessageContent
+            GatewayIntents = GatewayIntents.Guilds | GatewayIntents.GuildMessages | GatewayIntents.MessageContent | GatewayIntents.DirectMessages
         };
 
         _logger.LogInformation("Starting Discord client...");
@@ -70,6 +74,12 @@ public class DiscordService : IDiscordService
         await s_client.LoginAsync(TokenType.Bot, _options.Value.Token
             ?? throw new ArgumentNullException(nameof(_options.Value.Token))).ConfigureAwait(false);
         await s_client.StartAsync().ConfigureAwait(false);
+
+        // Set the client in the feedback bridge service
+        if (_feedbackBridgeService is FeedbackBridgeService bridgeService)
+        {
+            bridgeService.SetClient(s_client);
+        }
 
         _logger.LogInformation("Discord client started.");
     }
@@ -173,6 +183,14 @@ public class DiscordService : IDiscordService
         }
 
         var channel = message.Channel;
+        
+        // Check if this is a DM channel - handle feedback bridge
+        if (channel is SocketDMChannel dmChannel)
+        {
+            await _feedbackBridgeService.HandleFeedbackBridgeAsync(message, dmChannel).ConfigureAwait(false);
+            return;
+        }
+
         var guildChannel = channel as SocketGuildChannel;
         var guildId = guildChannel?.Guild.Id.ToString() ?? "0";
         var guildName = guildChannel?.Guild.Name ?? "DM";

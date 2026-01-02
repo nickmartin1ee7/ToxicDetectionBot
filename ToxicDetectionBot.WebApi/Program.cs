@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using ToxicDetectionBot.WebApi.Configuration;
 using ToxicDetectionBot.WebApi.Data;
 using ToxicDetectionBot.WebApi.Services;
+using ToxicDetectionBot.WebApi.Services.CommandHandlers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -36,6 +37,15 @@ builder.Services.AddScoped<IBackgroundJobService, BackgroundJobService>();
 builder.Services.AddScoped<ISentimentSummarizerService, SentimentSummarizerService>();
 builder.Services.AddScoped<IRetentionService, RetentionService>();
 builder.Services.AddScoped<IDiscordCommandHandler, DiscordCommandHandler>();
+builder.Services.AddScoped<IFeedbackBridgeService, FeedbackBridgeService>();
+builder.Services.AddScoped<FeedbackBridgeCleanupService>();
+
+// Add command handlers
+builder.Services.AddScoped<IShowStatsCommandHandler, ShowStatsCommandHandler>();
+builder.Services.AddScoped<ILeaderboardCommandHandler, LeaderboardCommandHandler>();
+builder.Services.AddScoped<IOptCommandHandler, OptCommandHandler>();
+builder.Services.AddScoped<IFeedbackCommandHandler, FeedbackCommandHandler>();
+builder.Services.AddScoped<ICheckCommandHandler, CheckCommandHandler>();
 
 builder.Services.AddHangfire(configuration => configuration.UseInMemoryStorage());
 builder.Services.AddHangfireServer();
@@ -66,8 +76,8 @@ app.MapHangfireDashboard();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await db.Database.EnsureCreatedAsync();
-    await db.Database.MigrateAsync();
+    await db.Database.EnsureCreatedAsync().ConfigureAwait(false);
+    await db.Database.MigrateAsync().ConfigureAwait(false);
 }
 
 // Start discord client on startup
@@ -80,10 +90,12 @@ using (var scope = app.Services.CreateScope())
 
     var sentimentSummarizerService = scope.ServiceProvider.GetRequiredService<ISentimentSummarizerService>();
     var retentionService = scope.ServiceProvider.GetRequiredService<IRetentionService>();
+    var feedbackBridgeCleanupService = scope.ServiceProvider.GetRequiredService<FeedbackBridgeCleanupService>();
 
     _ = bgService.StartDiscordClient();
     recurringJobManager.AddOrUpdate("sentiment-summarizer", () => sentimentSummarizerService.SummarizeUserSentiments(), "*/1 * * * *");
     recurringJobManager.AddOrUpdate("sentiment-retention", () => retentionService.PurgeOldSentiments(), "*/10 * * * *");
+    recurringJobManager.AddOrUpdate("feedback-bridge-cleanup", () => feedbackBridgeCleanupService.CleanupExpiredBridgesAsync(), "0 */6 * * *");
 }
 
 app.Run();

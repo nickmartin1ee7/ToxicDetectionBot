@@ -37,7 +37,7 @@ public class RetentionService : IRetentionService
 
         var oldSentiments = await dbContext.UserSentiments
             .Where(us => us.CreatedAt < cutoffDate)
-            .ToListAsync();
+            .ToListAsync().ConfigureAwait(false);
 
         if (oldSentiments.Count == 0)
         {
@@ -46,7 +46,7 @@ public class RetentionService : IRetentionService
         }
 
         dbContext.UserSentiments.RemoveRange(oldSentiments);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync().ConfigureAwait(false);
 
         _logger.LogInformation(
             "Sentiment retention purge completed. Deleted {Count} sentiments older than {RetentionDays} days (before {CutoffDate:yyyy-MM-dd HH:mm:ss} UTC)",

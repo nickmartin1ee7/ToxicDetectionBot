@@ -9,6 +9,6 @@ public class DiscordSettings
     public string? SentimentSystemPrompt { get; set; }
     public List<string> AdminList { get; set; } = [];
     public int RetentionInDays { get; set; } = 28;
-    public string? FeedbackWebhookUrl { get; set; }
+    public int FeedbackBridgeRetentionDays { get; set; } = 7;
     public ulong? DebugGuildId { get; set; }
 }

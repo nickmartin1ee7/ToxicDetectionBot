@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
     public DbSet<UserSentiment> UserSentiments { get; set; }
     public DbSet<UserSentimentScore> UserSentimentScores { get; set; }
     public DbSet<UserOptOut> UserOptOuts { get; set; }
+    public DbSet<FeedbackBridge> FeedbackBridges { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -34,6 +35,14 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.UserId);
             entity.HasIndex(e => e.IsOptedOut);
+        });
+
+        modelBuilder.Entity<FeedbackBridge>(entity =>
+        {
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.AdminId);
+            entity.HasIndex(e => e.AdminEmbedMessageId);
+            entity.HasIndex(e => e.ExpiresAt);
         });
     }
 }

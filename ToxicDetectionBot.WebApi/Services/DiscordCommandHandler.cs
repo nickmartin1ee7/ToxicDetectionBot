@@ -1,12 +1,8 @@
 ﻿using Discord;
 using Discord.WebSocket;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
-using System.Diagnostics;
-using System.Text.Json;
 using ToxicDetectionBot.WebApi.Configuration;
-using ToxicDetectionBot.WebApi.Data;
+using ToxicDetectionBot.WebApi.Services.CommandHandlers;
 
 namespace ToxicDetectionBot.WebApi.Services;
 
@@ -19,62 +15,51 @@ public interface IDiscordCommandHandler
 
 public class DiscordCommandHandler : IDiscordCommandHandler
 {
-    private const uint BrandColor = 0x83b670;
-
     private readonly ILogger<DiscordCommandHandler> _logger;
-    private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly IShowStatsCommandHandler _showStatsHandler;
+    private readonly ILeaderboardCommandHandler _leaderboardHandler;
+    private readonly IOptCommandHandler _optHandler;
+    private readonly IFeedbackCommandHandler _feedbackHandler;
+    private readonly ICheckCommandHandler _checkHandler;
     private readonly IOptions<DiscordSettings> _discordSettings;
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly IChatClient _chatClient;
     private readonly Dictionary<string, Func<SocketSlashCommand, Task>> _commandHandlers;
     private readonly Dictionary<string, Func<SocketUserCommand, Task>> _userCommandHandlers;
-    private readonly ChatOptions? _chatOptions;
-    private readonly ChatClientMetadata? _metadata;
-
-    private JsonDocument SchemaDoc =>
-        JsonDocument.Parse(_discordSettings.Value.JsonSchema
-            ?? throw new ArgumentNullException(nameof(_discordSettings.Value.JsonSchema)));
+    private DiscordSocketClient? _discordClient;
 
     public DiscordCommandHandler(
         ILogger<DiscordCommandHandler> logger,
-        IServiceScopeFactory serviceScopeFactory,
-        IOptions<DiscordSettings> discordSettings,
-        IHttpClientFactory httpClientFactory,
-        IChatClient chatClient)
+        IShowStatsCommandHandler showStatsHandler,
+        ILeaderboardCommandHandler leaderboardHandler,
+        IOptCommandHandler optHandler,
+        IFeedbackCommandHandler feedbackHandler,
+        ICheckCommandHandler checkHandler,
+        IOptions<DiscordSettings> discordSettings)
     {
         _logger = logger;
-        _serviceScopeFactory = serviceScopeFactory;
+        _showStatsHandler = showStatsHandler;
+        _leaderboardHandler = leaderboardHandler;
+        _optHandler = optHandler;
+        _feedbackHandler = feedbackHandler;
+        _checkHandler = checkHandler;
         _discordSettings = discordSettings;
-        _httpClientFactory = httpClientFactory;
-        _chatClient = chatClient;
+        
         _commandHandlers = new()
         {
-            ["showstats"] = HandleShowStatsAsync,
-            ["showleaderboard"] = HandleShowLeaderboardAsync,
-            ["opt"] = HandleOptAsync,
-            ["feedback"] = HandleFeedbackAsync,
-            ["check"] = HandleCheckAsync
+            ["showstats"] = _showStatsHandler.HandleShowStatsAsync,
+            ["showleaderboard"] = _leaderboardHandler.HandleShowLeaderboardAsync,
+            ["opt"] = _optHandler.HandleOptAsync,
+            ["feedback"] = cmd => _feedbackHandler.HandleFeedbackAsync(cmd, _discordClient!),
+            ["check"] = _checkHandler.HandleCheckAsync
         };
         _userCommandHandlers = new()
         {
-            ["Show Stats"] = HandleShowStatsUserCommandAsync
+            ["Show Stats"] = _showStatsHandler.HandleShowStatsUserCommandAsync
         };
-
-        _chatOptions ??= new ChatOptions
-        {
-            Instructions = _discordSettings.Value.SentimentSystemPrompt
-                ?? throw new ArgumentNullException(nameof(_discordSettings.Value.SentimentSystemPrompt)),
-            ResponseFormat = ChatResponseFormat.ForJsonSchema(
-                SchemaDoc.RootElement,
-                schemaName: "SentimentAnalysisResult",
-                schemaDescription: "Schema to classify a message's sentiment. IsToxic: False represents that the message was toxic/mean. True represents that the message was nice/polite.")
-        };
-
-        _metadata = _chatClient.GetService<ChatClientMetadata>();
     }
 
     public async Task RegisterCommandsAsync(DiscordSocketClient client)
     {
+        _discordClient = client;
         var commands = BuildSlashCommands();
         var userCommands = BuildUserCommands();
         ApplicationCommandProperties[] allCommands = [.. commands, .. userCommands];
@@ -148,7 +133,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
 
             if (!command.HasResponded)
             {
-                await command.RespondAsync("An error occurred while processing your command.", ephemeral: true);
+                await command.RespondAsync("An error occurred while processing your command.", ephemeral: true).ConfigureAwait(false);
             }
         }
     }
@@ -188,7 +173,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
 
             if (!command.HasResponded)
             {
-                await command.RespondAsync("An error occurred while processing your command.", ephemeral: true);
+                await command.RespondAsync("An error occurred while processing your command.", ephemeral: true).ConfigureAwait(false);
             }
         }
     }
@@ -237,380 +222,4 @@ public class DiscordCommandHandler : IDiscordCommandHandler
             .WithName($"Show Stats{suffix}")
             .Build()
     ];
-
-    private async Task HandleShowStatsUserCommandAsync(SocketUserCommand command)
-    {
-        var user = command.Data.Member;
-
-        if (command.Channel is not SocketGuildChannel { Guild: var guild })
-        {
-            await command.RespondAsync("This command can only be used in a server.", ephemeral: true);
-            return;
-        }
-
-        using var scope = _serviceScopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-        var userId = user.Id.ToString();
-        var guildId = guild.Id.ToString();
-
-        // Calculate guild-specific stats from UserSentiments
-        var sentiments = await dbContext.UserSentiments
-            .Where(s => s.UserId == userId && s.GuildId == guildId)
-            .ToListAsync();
-
-        var optOut = await dbContext.UserOptOuts.FirstOrDefaultAsync(o => o.UserId == userId);
-
-        var embed = BuildUserStatsEmbed(user, sentiments, optOut);
-        await command.RespondAsync(embed: embed);
-    }
-
-    private async Task HandleShowStatsAsync(SocketSlashCommand command)
-    {
-        if (command.Data.Options.FirstOrDefault()?.Value is not SocketUser user)
-        {
-            await command.RespondAsync("User has no sentiment yet.", ephemeral: true);
-            return;
-        }
-
-        if (command.Channel is not SocketGuildChannel { Guild: var guild })
-        {
-            await command.RespondAsync("This command can only be used in a server.", ephemeral: true);
-            return;
-        }
-
-        using var scope = _serviceScopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-        var userId = user.Id.ToString();
-        var guildId = guild.Id.ToString();
-
-        // Calculate guild-specific stats from UserSentiments
-        var sentiments = await dbContext.UserSentiments
-            .Where(s => s.UserId == userId && s.GuildId == guildId)
-            .ToListAsync();
-
-        var optOut = await dbContext.UserOptOuts.FirstOrDefaultAsync(o => o.UserId == userId);
-
-        var embed = BuildUserStatsEmbed(user, sentiments, optOut);
-        await command.RespondAsync(embed: embed);
-    }
-
-    private static Embed BuildUserStatsEmbed(SocketUser user, List<UserSentiment> sentiments, UserOptOut? optOut)
-    {
-        var embed = new EmbedBuilder()
-            .WithTitle($"Sentiment Stats for {user.Username}")
-            .WithThumbnailUrl(user.GetAvatarUrl() ?? user.GetDefaultAvatarUrl())
-            .WithColor(BrandColor)
-            .WithCurrentTimestamp();
-
-        if (optOut?.IsOptedOut == true)
-        {
-            embed.WithDescription("⚠️ This user has opted out of sentiment analysis.");
-        }
-        else if (sentiments.Count == 0)
-        {
-            embed.WithDescription("No stats available for this user in this server yet.");
-        }
-        else
-        {
-            var totalMessages = sentiments.Count;
-            var toxicMessages = sentiments.Count(s => s.IsToxic);
-            var nonToxicMessages = totalMessages - toxicMessages;
-            var toxicityPercentage = totalMessages > 0 ? (double)toxicMessages / totalMessages * 100 : 0;
-            var lastUpdated = sentiments.Max(s => s.CreatedAt);
-            var timestamp = new DateTimeOffset(lastUpdated).ToUnixTimeSeconds();
-
-            embed
-                .AddField("Total Messages", totalMessages.ToString(), inline: true)
-                .AddField("Toxic Messages", toxicMessages.ToString(), inline: true)
-                .AddField("Non-Toxic Messages", nonToxicMessages.ToString(), inline: true)
-                .AddField("Toxicity Percentage", $"{toxicityPercentage:F2}%", inline: true)
-                .AddField("Last Updated (UTC)", $"<t:{timestamp}:R>", inline: true);
-        }
-
-        return embed.Build();
-    }
-
-    private async Task HandleShowLeaderboardAsync(SocketSlashCommand command)
-    {
-        if (command.Channel is not SocketGuildChannel { Guild: var guild })
-        {
-            await command.RespondAsync("This command can only be used in a server.");
-            return;
-        }
-
-        using var scope = _serviceScopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-        var userId = command.User.Id.ToString();
-        var isAdmin = _discordSettings.Value.AdminList.Contains(userId);
-
-        IQueryable<UserSentimentScore> query = dbContext.UserSentimentScores;
-
-        if (!isAdmin)
-        {
-            var guildUserIds = guild.Users.Select(u => u.Id.ToString()).ToHashSet();
-            query = query.Where(s => guildUserIds.Contains(s.UserId));
-        }
-
-        var leaderboard = await query
-            .OrderByDescending(s => s.TotalMessages)
-            .ThenByDescending(s => s.ToxicityPercentage)
-            .Take(isAdmin ? 50 : 10)
-            .ToListAsync();
-
-        // For global view, get the most recent sentiment data for each user to display username, guild, and channel
-        Dictionary<string, UserSentiment?>? sentimentDetails = null;
-        if (isAdmin && leaderboard.Count > 0)
-        {
-            var userIds = leaderboard.Select(l => l.UserId).ToList();
-            var recentSentiments = await dbContext.UserSentiments
-                .Where(s => userIds.Contains(s.UserId))
-                .GroupBy(s => s.UserId)
-                .Select(g => g.OrderByDescending(s => s.CreatedAt).FirstOrDefault())
-                .ToListAsync();
-
-            sentimentDetails = recentSentiments
-                .Where(s => s != null)
-                .ToDictionary(s => s!.UserId, s => s);
-        }
-
-        var embed = BuildLeaderboardEmbed(guild, leaderboard, isAdmin, sentimentDetails);
-        await command.RespondAsync(embed: embed, ephemeral: isAdmin);
-    }
-
-    private static Embed BuildLeaderboardEmbed(SocketGuild guild, List<UserSentimentScore> leaderboard, bool isGlobalView, Dictionary<string, UserSentiment?>? sentimentDetails = null)
-    {
-        var title = isGlobalView
-            ? "🐍 Global Toxicity Leaderboard"
-            : $"🐍 Toxicity Leaderboard - {guild.Name}";
-
-        var embed = new EmbedBuilder()
-            .WithTitle(title)
-            .WithColor(BrandColor)
-            .WithCurrentTimestamp();
-
-        if (leaderboard.Count == 0)
-        {
-            embed.WithDescription(isGlobalView
-                ? "No global stats available yet."
-                : "No stats available for this server yet.");
-            return embed.Build();
-        }
-
-        var description = string.Join('\n', leaderboard.Select((stat, index) =>
-        {
-            var medal = GetRankMedal(index);
-
-            if (isGlobalView && sentimentDetails?.TryGetValue(stat.UserId, out var sentiment) == true && sentiment != null)
-            {
-                return $"{medal} **{sentiment.Username}** (Guild: {sentiment.GuildName}, Channel: {sentiment.ChannelName}) - {stat.ToxicityPercentage:F2}% toxic ({stat.ToxicMessages}/{stat.TotalMessages} messages)";
-            }
-            else
-            {
-                var user = guild.GetUser(ulong.Parse(stat.UserId));
-                var username = user?.Username ?? $"Unknown User ({stat.UserId})";
-                return $"{medal} **{username}** - {stat.ToxicityPercentage:F2}% toxic ({stat.ToxicMessages}/{stat.TotalMessages} messages)";
-            }
-        }));
-
-        embed.WithDescription(description);
-        return embed.Build();
-    }
-
-    private static string GetRankMedal(int index) => index switch
-    {
-        0 => "🥇",
-        1 => "🥈",
-        2 => "🥉",
-        _ => $"{index + 1}."
-    };
-
-    private async Task HandleOptAsync(SocketSlashCommand command)
-    {
-        if (command.Data.Options.FirstOrDefault()?.Value is not string choice)
-        {
-            await command.RespondAsync("Invalid choice.", ephemeral: true);
-            return;
-        }
-
-        var userId = command.User.Id.ToString();
-        var isOptingOut = choice.Equals("out", StringComparison.OrdinalIgnoreCase);
-
-        using var scope = _serviceScopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-        var optOut = await dbContext.UserOptOuts.FindAsync(userId);
-
-        if (optOut is null)
-        {
-            optOut = new UserOptOut
-            {
-                UserId = userId,
-                IsOptedOut = isOptingOut,
-                LastChangedAt = DateTime.UtcNow
-            };
-            dbContext.UserOptOuts.Add(optOut);
-        }
-        else
-        {
-            optOut.IsOptedOut = isOptingOut;
-            optOut.LastChangedAt = DateTime.UtcNow;
-        }
-
-        // Delete user data when opting out
-        if (isOptingOut)
-        {
-            await dbContext.UserSentiments
-                .Where(s => s.UserId == userId)
-                .ExecuteDeleteAsync();
-
-            await dbContext.UserSentimentScores
-                .Where(s => s.UserId == userId)
-                .ExecuteDeleteAsync();
-        }
-
-        await dbContext.SaveChangesAsync();
-
-        var message = isOptingOut
-            ? "✅ You have opted **OUT** of sentiment analysis. Your messages will no longer be evaluated and your existing data has been deleted."
-            : "✅ You have opted **IN** to sentiment analysis. Your messages will now be evaluated.";
-
-        await command.RespondAsync(message, ephemeral: true);
-
-        _logger.LogInformation(
-            "User {UserId} ({Username}) opted {OptStatus} of sentiment analysis",
-            userId, command.User.Username, isOptingOut ? "OUT" : "IN");
-    }
-
-    private async Task HandleFeedbackAsync(SocketSlashCommand command)
-    {
-        if (command.Data.Options.FirstOrDefault()?.Value is not string message)
-        {
-            await command.RespondAsync("Please provide a feedback message.", ephemeral: true);
-            return;
-        }
-
-        var webhookUrl = _discordSettings.Value.FeedbackWebhookUrl;
-
-        if (string.IsNullOrWhiteSpace(webhookUrl))
-        {
-            _logger.LogWarning("Feedback command used but FeedbackWebhookUrl is not configured");
-            await command.RespondAsync("Feedback system is not configured. Please contact the administrator.", ephemeral: true);
-            return;
-        }
-
-        try
-        {
-            var guildName = command.Channel is SocketGuildChannel { Guild: var guild }
-                ? guild.Name
-                : "DM";
-
-            var embed = new
-            {
-                embeds = new[]
-                {
-                    new
-                    {
-                        title = "📬 New Feedback",
-                        description = message,
-                        color = BrandColor,
-                        fields = new[]
-                        {
-                            new { name = "User", value = $"{command.User.Username} ({command.User.Id})", inline = true },
-                            new { name = "Server", value = guildName, inline = true },
-                            new { name = "Channel", value = command.Channel.Name, inline = true }
-                        },
-                        timestamp = DateTimeOffset.UtcNow.ToString("o")
-                    }
-                }
-            };
-
-            var httpClient = _httpClientFactory.CreateClient();
-            var response = await httpClient.PostAsJsonAsync(webhookUrl, embed);
-
-            if (response.IsSuccessStatusCode)
-            {
-                await command.RespondAsync("✅ Thank you for your feedback! Your message has been sent to the developer.", ephemeral: true);
-
-                _logger.LogInformation(
-                    "Feedback submitted by user {UserId} ({Username}) from server {GuildName}: {Message}",
-                    command.User.Id,
-                    command.User.Username,
-                    guildName,
-                    message);
-            }
-            else
-            {
-                _logger.LogError(
-                    "Failed to send feedback webhook. Status: {StatusCode}, Response: {Response}",
-                    response.StatusCode,
-                    await response.Content.ReadAsStringAsync());
-
-                await command.RespondAsync("❌ Failed to send feedback. Please try again later.", ephemeral: true);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error sending feedback from user {UserId} ({Username})",
-                command.User.Id,
-                command.User.Username);
-
-            await command.RespondAsync("❌ An error occurred while sending feedback. Please try again later.", ephemeral: true);
-        }
-    }
-
-    private async Task HandleCheckAsync(SocketSlashCommand command)
-    {
-        if (command.Data.Options.FirstOrDefault()?.Value is not string message)
-        {
-            await command.RespondAsync("Please provide a message to check.", ephemeral: true);
-            return;
-        }
-
-        await command.DeferAsync(ephemeral: true);
-
-        try
-        {
-            var sw = new Stopwatch();
-            sw.Start();
-            var result = await _chatClient.GetResponseAsync(
-                chatMessage: message,
-                options: _chatOptions);
-            sw.Stop();
-
-            var resultText = result.Text.Trim();
-            var classificationResult = JsonSerializer.Deserialize<ClassificationResult>(resultText);
-            var embedColor = classificationResult?.IsToxic == true ? 0xFF6B6Bu : BrandColor;
-            var model = _metadata?.DefaultModelId ?? "Unknown Model";
-
-            var embed = new EmbedBuilder()
-                .WithTitle("🔍 Toxicity Check Result")
-                .WithDescription($"**Message:**{Environment.NewLine}{message}")
-                .WithColor(embedColor)
-                .AddField("Sentiment", classificationResult?.IsToxic == true ? "🐍 Toxic" : "😇 Nice", inline: true)
-                .AddField("Model", $"Text evaluated with `{model}`.", inline: true)
-                .WithFooter($"Completed in `{sw.ElapsedMilliseconds} ms`.")
-                .WithCurrentTimestamp()
-                .Build();
-
-            await command.FollowupAsync(embed: embed, ephemeral: true);
-
-            _logger.LogInformation(
-                "Check command used by user {UserId} ({Username}). Message: '{Message}', Result: {IsToxic}",
-                command.User.Id,
-                command.User.Username,
-                message,
-                classificationResult?.IsToxic ?? false);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error checking message toxicity for user {UserId} ({Username})",
-                command.User.Id,
-                command.User.Username);
-
-            await command.FollowupAsync("❌ An error occurred while checking the message. Please try again later.", ephemeral: true);
-        }
-    }
 }

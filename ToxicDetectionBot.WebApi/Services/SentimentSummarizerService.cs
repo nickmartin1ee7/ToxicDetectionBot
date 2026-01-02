@@ -30,7 +30,8 @@ public class SentimentSummarizerService : ISentimentSummarizerService
 
         var unsummarizedSentiments = await dbContext.UserSentiments
             .Where(us => !us.IsSummarized)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
 
         if (unsummarizedSentiments.Count == 0)
         {
@@ -55,7 +56,8 @@ public class SentimentSummarizerService : ISentimentSummarizerService
             totalNonToxicMessages += nonToxicMessages;
 
             var existingScore = await dbContext.UserSentimentScores
-                .FirstOrDefaultAsync(s => s.UserId == userId);
+                .FirstOrDefaultAsync(s => s.UserId == userId)
+                .ConfigureAwait(false);
 
             if (existingScore is not null)
             {
@@ -91,7 +93,8 @@ public class SentimentSummarizerService : ISentimentSummarizerService
             }
         }
 
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync()
+            .ConfigureAwait(false);
 
         var totalMessages = totalToxicMessages + totalNonToxicMessages;
         var overallToxicityPercentage = totalMessages > 0
