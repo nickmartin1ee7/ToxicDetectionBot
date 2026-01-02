@@ -128,7 +128,8 @@ public class DiscordService : IDiscordService
     {
         s_chatOptions ??= new ChatOptions
         {
-            Instructions = "Evaluate and classify the user sentiment of the message.",
+            Instructions = _options.Value.SentimentSystemPrompt
+                ?? throw new ArgumentNullException(nameof(_options.Value.SentimentSystemPrompt)),
             ResponseFormat = ChatResponseFormat.ForJsonSchema(
                 SchemaDoc!.RootElement,
                 schemaName: "SentimentAnalysisResult",

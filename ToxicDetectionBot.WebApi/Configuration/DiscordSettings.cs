@@ -6,6 +6,7 @@ public class DiscordSettings
     
     public string? Token { get; set; }
     public string? JsonSchema { get; set; }
+    public string? SentimentSystemPrompt { get; set; }
     public List<string> AdminList { get; set; } = [];
     public int RetentionInDays { get; set; } = 28;
     public string? FeedbackWebhookUrl { get; set; }
