@@ -180,15 +180,6 @@ public partial class DiscordService : IDiscordService
             return;
         }
 
-        if (WebsiteRegex().IsMatch(messageContent))
-        {
-            _logger.LogInformation("Message {MessageId} from user '{Username}' (ID: {UserId}) appears to be a link, skipping sentiment analysis.",
-                message.Id,
-                message.Author.Username,
-                message.Author.Id);
-            return;
-        }
-
         var channel = message.Channel;
         var guildChannel = channel as SocketGuildChannel;
         var guildId = guildChannel?.Guild.Id.ToString() ?? "0";
@@ -196,17 +187,33 @@ public partial class DiscordService : IDiscordService
         var channelName = channel.Name ?? "Unknown";
         var username = message.Author.Username;
 
-
-        _logger.LogInformation(
-            "Message {MessageId} received from user '{Username}' (ID: {UserId}) in channel '{ChannelName}' (ID: {ChannelId}) in guild '{GuildName}' (ID: {GuildId}). Message: {MessageContent}",
-            message.Id,
-            username,
-            message.Author.Id,
-            channelName,
-            channel.Id,
-            guildName,
-            guildId,
-            messageContent);
+        if (WebsiteRegex().IsMatch(messageContent))
+        {
+            _logger.LogInformation(
+                "Message {MessageId} received from user '{Username}' (ID: {UserId}) in channel '{ChannelName}' (ID: {ChannelId}) in guild '{GuildName}' (ID: {GuildId}) - appears to be a link. Skipping sentiment analysis. Message: {MessageContent}",
+                message.Id,
+                username,
+                message.Author.Id,
+                channelName,
+                channel.Id,
+                guildName,
+                guildId,
+                messageContent);
+            return;
+        }
+        else
+        {
+            _logger.LogInformation(
+                "Message {MessageId} received from user '{Username}' (ID: {UserId}) in channel '{ChannelName}' (ID: {ChannelId}) in guild '{GuildName}' (ID: {GuildId}). Message: {MessageContent}",
+                message.Id,
+                username,
+                message.Author.Id,
+                channelName,
+                channel.Id,
+                guildName,
+                guildId,
+                messageContent);
+        }
 
         using var scope = _serviceScopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
