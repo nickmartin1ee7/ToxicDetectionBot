@@ -172,6 +172,13 @@ public class DiscordService : IDiscordService
             return;
         }
 
+        var messageContent = message.CleanContent;
+
+        if (string.IsNullOrWhiteSpace(messageContent))
+        {
+            return;
+        }
+
         var channel = message.Channel;
         var guildChannel = channel as SocketGuildChannel;
         var guildId = guildChannel?.Guild.Id.ToString() ?? "0";
@@ -179,7 +186,6 @@ public class DiscordService : IDiscordService
         var channelName = channel.Name ?? "Unknown";
         var username = message.Author.Username;
 
-        var messageContent = message.CleanContent;
 
         _logger.LogInformation(
             "Message {MessageId} received from user '{Username}' (ID: {UserId}) in channel '{ChannelName}' (ID: {ChannelId}) in guild '{GuildName}' (ID: {GuildId}). Message: {MessageContent}",
