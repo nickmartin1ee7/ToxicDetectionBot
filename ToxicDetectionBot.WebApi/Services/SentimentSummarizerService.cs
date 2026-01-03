@@ -145,13 +145,48 @@ public class SentimentSummarizerService : ISentimentSummarizerService
             ? (double)totalToxicMessages / totalMessages * 100
             : 0;
 
+        // Calculate alignment metrics
+        var alignmentTotals = new Dictionary<string, int>
+        {
+            [nameof(AlignmentType.LawfulGood)] = 0,
+            [nameof(AlignmentType.NeutralGood)] = 0,
+            [nameof(AlignmentType.ChaoticGood)] = 0,
+            [nameof(AlignmentType.LawfulNeutral)] = 0,
+            [nameof(AlignmentType.TrueNeutral)] = 0,
+            [nameof(AlignmentType.ChaoticNeutral)] = 0,
+            [nameof(AlignmentType.LawfulEvil)] = 0,
+            [nameof(AlignmentType.NeutralEvil)] = 0,
+            [nameof(AlignmentType.ChaoticEvil)] = 0
+        };
+
+        foreach (var sentiment in unsummarizedSentiments)
+        {
+            if (alignmentTotals.ContainsKey(sentiment.Alignment))
+            {
+                alignmentTotals[sentiment.Alignment]++;
+            }
+        }
+
+        var dominantAlignment = alignmentTotals.OrderByDescending(kvp => kvp.Value).First().Key;
+
         _logger.LogInformation(
-            "Sentiment summarization completed. Processed {UserGuildCount} user-guild combinations with {TotalMessages} messages ({ToxicMessages} toxic, {NonToxicMessages} non-toxic, {ToxicityPercentage:F2}% toxic overall)",
+            "Sentiment summarization completed. Processed {UserGuildCount} user-guild combinations with {TotalMessages} messages ({ToxicMessages} toxic, {NonToxicMessages} non-toxic, {ToxicityPercentage:F2}% toxic overall). " +
+            "Alignment distribution: LG={LawfulGood}, NG={NeutralGood}, CG={ChaoticGood}, LN={LawfulNeutral}, TN={TrueNeutral}, CN={ChaoticNeutral}, LE={LawfulEvil}, NE={NeutralEvil}, CE={ChaoticEvil}. Dominant: {DominantAlignment}",
             userGuildGroups.Count(),
             totalMessages,
             totalToxicMessages,
             totalNonToxicMessages,
-            overallToxicityPercentage);
+            overallToxicityPercentage,
+            alignmentTotals[nameof(AlignmentType.LawfulGood)],
+            alignmentTotals[nameof(AlignmentType.NeutralGood)],
+            alignmentTotals[nameof(AlignmentType.ChaoticGood)],
+            alignmentTotals[nameof(AlignmentType.LawfulNeutral)],
+            alignmentTotals[nameof(AlignmentType.TrueNeutral)],
+            alignmentTotals[nameof(AlignmentType.ChaoticNeutral)],
+            alignmentTotals[nameof(AlignmentType.LawfulEvil)],
+            alignmentTotals[nameof(AlignmentType.NeutralEvil)],
+            alignmentTotals[nameof(AlignmentType.ChaoticEvil)],
+            dominantAlignment);
     }
 
     private static string GetDominantAlignment(UserAlignmentScore score)
