@@ -1,5 +1,8 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
+var seq = builder.AddSeq("seq")
+    .WithDataVolume();
+
 var ollamaServer = builder.AddOllama("ollama")
     .WithDataVolume()
 #if DEBUG
@@ -15,6 +18,7 @@ builder.AddProject<Projects.ToxicDetectionBot_WebApi>("toxicdetectionbot-webapi"
     .WithHttpHealthCheck("/hangfire")
     //.WithUrl("/swagger/index.html", "Swagger")
     .WithUrl("/hangfire", "Hangfire")
-    .WithReference(chatModel);
+    .WithReference(chatModel)
+    .WithReference(seq);
 
 builder.Build().Run();

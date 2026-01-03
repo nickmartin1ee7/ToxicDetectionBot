@@ -10,6 +10,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
+builder.AddSeqEndpoint("seq");
+
 var dbPathSentiment = Path.Combine(builder.Environment.ContentRootPath, $"{nameof(ToxicDetectionBot)}-sentiment.db");
 var dbPathHangfire = Path.Combine(builder.Environment.ContentRootPath, $"{nameof(ToxicDetectionBot)}-hangfire.db");
 
