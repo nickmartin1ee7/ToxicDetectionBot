@@ -16,7 +16,7 @@ public static class EmbedHelper
 
         if (optOut?.IsOptedOut == true)
         {
-            embed.WithDescription("🚫 This user has opted out of sentiment analysis.");
+            embed.WithDescription($"{DiscordConstants.OptOutEmoji} This user has opted out of sentiment analysis.");
         }
         else if (sentimentScore is null || sentimentScore.TotalMessages == 0)
         {
@@ -92,8 +92,8 @@ public static class EmbedHelper
     {
         var sortType = isToxicitySort ? "Toxicity" : "Alignment";
         var title = isGlobalView
-            ? $"🌍🐍 Global {sortType} Leaderboard"
-            : $"🐍 {sortType} Leaderboard - {guild.Name}";
+            ? $"{DiscordConstants.GlobalEmoji}{DiscordConstants.SnakeEmoji} Global {sortType} Leaderboard"
+            : $"{DiscordConstants.SnakeEmoji} {sortType} Leaderboard - {guild.Name}";
 
         var embed = new EmbedBuilder()
             .WithTitle(title)
@@ -143,7 +143,7 @@ public static class EmbedHelper
         string? dbSize)
     {
         var embed = new EmbedBuilder()
-            .WithTitle("📊 Bot Statistics")
+            .WithTitle($"{DiscordConstants.StatsEmoji} Bot Statistics")
             .WithColor(DiscordConstants.BrandColor)
             .WithCurrentTimestamp();
 
@@ -152,11 +152,11 @@ public static class EmbedHelper
                         $"**Memory:** {memoryMb:F2} MB\n" +
                         $"**CPU Time:** {cpuTime.TotalSeconds:F1}s\n" +
                         $"**Threads:** {threadCount}";
-        embed.AddField("💻 System", systemInfo, inline: true);
+        embed.AddField($"{DiscordConstants.SystemEmoji} System", systemInfo, inline: true);
 
         // Discord Information
         var discordInfo = $"**Guilds:** {guildCount}";
-        embed.AddField("🎮 Discord", discordInfo, inline: true);
+        embed.AddField($"{DiscordConstants.DiscordEmoji} Discord", discordInfo, inline: true);
 
         // Database Statistics
         var dbStats = $"**Total Messages:** {totalSentiments:N0}\n" +
@@ -167,7 +167,7 @@ public static class EmbedHelper
             dbStats += $"**Database Size:** {dbSize}";
         }
 
-        embed.AddField("💾 Database", dbStats, inline: false);
+        embed.AddField($"{DiscordConstants.DatabaseEmoji} Database", dbStats, inline: false);
 
         return embed.Build();
     }
@@ -184,10 +184,10 @@ public static class EmbedHelper
         var alignmentFormatted = AlignmentHelper.FormatAlignment(alignment);
 
         var embed = new EmbedBuilder()
-            .WithTitle("🔍 Toxicity Check Result")
+            .WithTitle($"{DiscordConstants.SearchEmoji} Toxicity Check Result")
             .WithDescription($"**Message:**{Environment.NewLine}{message}")
             .WithColor(embedColor)
-            .AddField("Sentiment", isToxic ? "☠️ Toxic" : "✨ Nice", inline: true)
+            .AddField("Sentiment", isToxic ? $"{DiscordConstants.ToxicEmoji} Toxic" : $"{DiscordConstants.NiceEmoji} Nice", inline: true)
             .AddField("Alignment", $"{alignmentEmoji} {alignmentFormatted}", inline: true)
             .AddField("Model", $"Text evaluated with `{model}`.", inline: true)
             .WithFooter($"Completed in `{elapsedMilliseconds} ms`.")
@@ -199,9 +199,9 @@ public static class EmbedHelper
 
     private static string GetRankMedal(int index) => index switch
     {
-        0 => "🥇",
-        1 => "🥈",
-        2 => "🥉",
+        0 => DiscordConstants.GoldMedalEmoji,
+        1 => DiscordConstants.SilverMedalEmoji,
+        2 => DiscordConstants.BronzeMedalEmoji,
         _ => $"{index + 1}."
     };
 }

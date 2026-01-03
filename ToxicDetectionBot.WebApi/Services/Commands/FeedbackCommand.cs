@@ -50,7 +50,7 @@ public class FeedbackCommand : ISlashCommand
                 {
                     new
                     {
-                        title = "?? New Feedback",
+                        title = $"{DiscordConstants.FeedbackEmoji} New Feedback",
                         description = message,
                         color = DiscordConstants.BrandColor,
                         fields = new[]
@@ -69,7 +69,7 @@ public class FeedbackCommand : ISlashCommand
 
             if (response.IsSuccessStatusCode)
             {
-                await command.RespondAsync("? Thank you for your feedback! Your message has been sent to the developer.", ephemeral: true).ConfigureAwait(false);
+                await command.RespondAsync($"{DiscordConstants.ThankYouEmoji} Thank you for your feedback! Your message has been sent to the developer.", ephemeral: true).ConfigureAwait(false);
 
                 _logger.LogInformation(
                     "Feedback submitted by user {UserId} ({Username}) from server {GuildName}: {Message}",
@@ -85,7 +85,7 @@ public class FeedbackCommand : ISlashCommand
                     response.StatusCode,
                     await response.Content.ReadAsStringAsync());
 
-                await command.RespondAsync("? Failed to send feedback. Please try again later.", ephemeral: true);
+                await command.RespondAsync($"{DiscordConstants.ErrorEmoji} Failed to send feedback. Please try again later.", ephemeral: true);
             }
         }
         catch (Exception ex)
@@ -94,7 +94,7 @@ public class FeedbackCommand : ISlashCommand
                 command.User.Id,
                 command.User.Username);
 
-            await command.RespondAsync("? An error occurred while sending feedback. Please try again later.", ephemeral: true);
+            await command.RespondAsync($"{DiscordConstants.ErrorEmoji} An error occurred while sending feedback. Please try again later.", ephemeral: true);
         }
     }
 }

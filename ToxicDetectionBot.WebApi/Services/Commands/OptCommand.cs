@@ -1,6 +1,7 @@
 using Discord.WebSocket;
 using Microsoft.EntityFrameworkCore;
 using ToxicDetectionBot.WebApi.Data;
+using ToxicDetectionBot.WebApi.Services.Commands.Helpers;
 
 namespace ToxicDetectionBot.WebApi.Services.Commands;
 
@@ -71,8 +72,8 @@ public class OptCommand : ISlashCommand
         await dbContext.SaveChangesAsync().ConfigureAwait(false);
 
         var message = isOptingOut
-            ? "?? You have opted **OUT** of sentiment analysis. Your messages will no longer be evaluated and your existing data has been deleted."
-            : "? You have opted **IN** to sentiment analysis. Your messages will now be evaluated.";
+            ? $"{DiscordConstants.OptOutEmoji} You have opted **OUT** of sentiment analysis. Your messages will no longer be evaluated and your existing data has been deleted."
+            : $"{DiscordConstants.OptInEmoji} You have opted **IN** to sentiment analysis. Your messages will now be evaluated.";
 
         await command.RespondAsync(message, ephemeral: true).ConfigureAwait(false);
 

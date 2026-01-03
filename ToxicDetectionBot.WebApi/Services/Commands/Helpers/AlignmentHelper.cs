@@ -6,16 +6,16 @@ public static class AlignmentHelper
 {
     public static string GetAlignmentEmoji(string alignment) => alignment switch
     {
-        nameof(AlignmentType.LawfulGood) => "??",
-        nameof(AlignmentType.NeutralGood) => "???",
-        nameof(AlignmentType.ChaoticGood) => "??",
-        nameof(AlignmentType.LawfulNeutral) => "??",
-        nameof(AlignmentType.TrueNeutral) => "??",
-        nameof(AlignmentType.ChaoticNeutral) => "??",
-        nameof(AlignmentType.LawfulEvil) => "??",
-        nameof(AlignmentType.NeutralEvil) => "??",
-        nameof(AlignmentType.ChaoticEvil) => "??",
-        _ => "?"
+        nameof(AlignmentType.LawfulGood) => DiscordConstants.LawfulGoodEmoji,
+        nameof(AlignmentType.NeutralGood) => DiscordConstants.NeutralGoodEmoji,
+        nameof(AlignmentType.ChaoticGood) => DiscordConstants.ChaoticGoodEmoji,
+        nameof(AlignmentType.LawfulNeutral) => DiscordConstants.LawfulNeutralEmoji,
+        nameof(AlignmentType.TrueNeutral) => DiscordConstants.TrueNeutralEmoji,
+        nameof(AlignmentType.ChaoticNeutral) => DiscordConstants.ChaoticNeutralEmoji,
+        nameof(AlignmentType.LawfulEvil) => DiscordConstants.LawfulEvilEmoji,
+        nameof(AlignmentType.NeutralEvil) => DiscordConstants.NeutralEvilEmoji,
+        nameof(AlignmentType.ChaoticEvil) => DiscordConstants.ChaoticEvilEmoji,
+        _ => DiscordConstants.UnknownAlignmentEmoji
     };
 
     public static string FormatAlignment(string alignment) => alignment switch
