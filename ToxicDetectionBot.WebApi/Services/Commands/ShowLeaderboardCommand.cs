@@ -127,7 +127,7 @@ public class ShowLeaderboardCommand : ISlashCommand
         return topUsers.Select(t =>
         {
             userDetailsDict.TryGetValue(t.UserId, out var details);
-            return (t.UserId, t.ToxicityPercentage, t.Alignment, t.TotalMessages, details.Username, details.GuildName, details.ChannelName);
+            return (t.UserId, t.ToxicityPercentage, t.Alignment, t.TotalMessages, (string?)details.Username, (string?)details.GuildName, (string?)details.ChannelName);
         }).ToList();
     }
 
