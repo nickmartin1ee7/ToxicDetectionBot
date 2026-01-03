@@ -54,6 +54,7 @@ public class SentimentSummarizerService : ISentimentSummarizerService
             totalToxicMessages += toxicMessages;
             totalNonToxicMessages += nonToxicMessages;
 
+            // Update sentiment scores
             var existingScore = await dbContext.UserSentimentScores
                 .FirstOrDefaultAsync(s => s.UserId == userId);
 
@@ -85,6 +86,48 @@ public class SentimentSummarizerService : ISentimentSummarizerService
                 dbContext.UserSentimentScores.Add(sentimentScore);
             }
 
+            // Update alignment scores
+            var alignmentCounts = sentiments.GroupBy(s => s.Alignment)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            var existingAlignmentScore = await dbContext.UserAlignmentScores
+                .FirstOrDefaultAsync(s => s.UserId == userId);
+
+            if (existingAlignmentScore is not null)
+            {
+                // Increment counts for each alignment
+                existingAlignmentScore.LawfulGoodCount += alignmentCounts.GetValueOrDefault(nameof(AlignmentType.LawfulGood), 0);
+                existingAlignmentScore.NeutralGoodCount += alignmentCounts.GetValueOrDefault(nameof(AlignmentType.NeutralGood), 0);
+                existingAlignmentScore.ChaoticGoodCount += alignmentCounts.GetValueOrDefault(nameof(AlignmentType.ChaoticGood), 0);
+                existingAlignmentScore.LawfulNeutralCount += alignmentCounts.GetValueOrDefault(nameof(AlignmentType.LawfulNeutral), 0);
+                existingAlignmentScore.TrueNeutralCount += alignmentCounts.GetValueOrDefault(nameof(AlignmentType.TrueNeutral), 0);
+                existingAlignmentScore.ChaoticNeutralCount += alignmentCounts.GetValueOrDefault(nameof(AlignmentType.ChaoticNeutral), 0);
+                existingAlignmentScore.LawfulEvilCount += alignmentCounts.GetValueOrDefault(nameof(AlignmentType.LawfulEvil), 0);
+                existingAlignmentScore.NeutralEvilCount += alignmentCounts.GetValueOrDefault(nameof(AlignmentType.NeutralEvil), 0);
+                existingAlignmentScore.ChaoticEvilCount += alignmentCounts.GetValueOrDefault(nameof(AlignmentType.ChaoticEvil), 0);
+                existingAlignmentScore.DominantAlignment = GetDominantAlignment(existingAlignmentScore);
+                existingAlignmentScore.SummarizedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                var alignmentScore = new UserAlignmentScore
+                {
+                    UserId = userId,
+                    LawfulGoodCount = alignmentCounts.GetValueOrDefault(nameof(AlignmentType.LawfulGood), 0),
+                    NeutralGoodCount = alignmentCounts.GetValueOrDefault(nameof(AlignmentType.NeutralGood), 0),
+                    ChaoticGoodCount = alignmentCounts.GetValueOrDefault(nameof(AlignmentType.ChaoticGood), 0),
+                    LawfulNeutralCount = alignmentCounts.GetValueOrDefault(nameof(AlignmentType.LawfulNeutral), 0),
+                    TrueNeutralCount = alignmentCounts.GetValueOrDefault(nameof(AlignmentType.TrueNeutral), 0),
+                    ChaoticNeutralCount = alignmentCounts.GetValueOrDefault(nameof(AlignmentType.ChaoticNeutral), 0),
+                    LawfulEvilCount = alignmentCounts.GetValueOrDefault(nameof(AlignmentType.LawfulEvil), 0),
+                    NeutralEvilCount = alignmentCounts.GetValueOrDefault(nameof(AlignmentType.NeutralEvil), 0),
+                    ChaoticEvilCount = alignmentCounts.GetValueOrDefault(nameof(AlignmentType.ChaoticEvil), 0)
+                };
+                alignmentScore.DominantAlignment = GetDominantAlignment(alignmentScore);
+                
+                dbContext.UserAlignmentScores.Add(alignmentScore);
+            }
+
             foreach (var sentiment in sentiments)
             {
                 sentiment.IsSummarized = true;
@@ -105,5 +148,23 @@ public class SentimentSummarizerService : ISentimentSummarizerService
             totalToxicMessages,
             totalNonToxicMessages,
             overallToxicityPercentage);
+    }
+
+    private static string GetDominantAlignment(UserAlignmentScore score)
+    {
+        var alignments = new Dictionary<string, int>
+        {
+            [nameof(AlignmentType.LawfulGood)] = score.LawfulGoodCount,
+            [nameof(AlignmentType.NeutralGood)] = score.NeutralGoodCount,
+            [nameof(AlignmentType.ChaoticGood)] = score.ChaoticGoodCount,
+            [nameof(AlignmentType.LawfulNeutral)] = score.LawfulNeutralCount,
+            [nameof(AlignmentType.TrueNeutral)] = score.TrueNeutralCount,
+            [nameof(AlignmentType.ChaoticNeutral)] = score.ChaoticNeutralCount,
+            [nameof(AlignmentType.LawfulEvil)] = score.LawfulEvilCount,
+            [nameof(AlignmentType.NeutralEvil)] = score.NeutralEvilCount,
+            [nameof(AlignmentType.ChaoticEvil)] = score.ChaoticEvilCount
+        };
+
+        return alignments.OrderByDescending(kvp => kvp.Value).First().Key;
     }
 }

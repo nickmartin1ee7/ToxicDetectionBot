@@ -11,6 +11,7 @@ public class UserSentiment
     public required string GuildName { get; set; }
     public required string ChannelName { get; set; }
     public bool IsToxic { get; set; }
+    public string Alignment { get; set; } = nameof(AlignmentType.TrueNeutral);
     public bool IsSummarized { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

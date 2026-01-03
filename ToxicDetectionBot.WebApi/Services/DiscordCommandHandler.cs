@@ -79,10 +79,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         var userCommands = BuildUserCommands();
         ApplicationCommandProperties[] allCommands = [.. commands, .. userCommands];
 
-        // Register globally
-        _ = Task.Run(async () => await client.BulkOverwriteGlobalApplicationCommandsAsync(allCommands));
-
-        // Additionally register debug commands to debug guild if configured
+        // Register debug commands to debug guild if configured
         if (_discordSettings.Value.DebugGuildId.HasValue)
         {
             var debugGuildId = _discordSettings.Value.DebugGuildId.Value;
@@ -112,6 +109,10 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                     _logger.LogError(ex, "Failed to register commands to debug guild {GuildId}", debugGuildId);
                 }
             });
+        }
+        else
+        {
+            _ = Task.Run(async () => await client.BulkOverwriteGlobalApplicationCommandsAsync(allCommands));
         }
     }
 
@@ -203,7 +204,14 @@ public class DiscordCommandHandler : IDiscordCommandHandler
 
         new SlashCommandBuilder()
             .WithName($"showleaderboard{suffix}")
-            .WithDescription("Show the toxicity leaderboard for this server")
+            .WithDescription("Show the leaderboard for this server")
+            .AddOption(new SlashCommandOptionBuilder()
+                .WithName("sort")
+                .WithDescription("Choose what to sort by")
+                .WithRequired(false)
+                .AddChoice("Toxicity", "toxicity")
+                .AddChoice("Alignment", "alignment")
+                .WithType(ApplicationCommandOptionType.String))
             .Build(),
 
         new SlashCommandBuilder()
@@ -254,14 +262,21 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         var userId = user.Id.ToString();
         var guildId = guild.Id.ToString();
 
-        // Calculate guild-specific stats from UserSentiments
-        var sentiments = await dbContext.UserSentiments
-            .Where(s => s.UserId == userId && s.GuildId == guildId)
-            .ToListAsync();
+        // Get pre-computed scores
+        var sentimentScore = await dbContext.UserSentimentScores
+            .FirstOrDefaultAsync(s => s.UserId == userId);
+
+        var alignmentScore = await dbContext.UserAlignmentScores
+            .FirstOrDefaultAsync(s => s.UserId == userId);
 
         var optOut = await dbContext.UserOptOuts.FirstOrDefaultAsync(o => o.UserId == userId);
 
-        var embed = BuildUserStatsEmbed(user, sentiments, optOut);
+        // Get last updated timestamp from UserSentiments
+        var lastUpdated = await dbContext.UserSentiments
+            .Where(s => s.UserId == userId && s.GuildId == guildId)
+            .MaxAsync(s => (DateTime?)s.CreatedAt);
+
+        var embed = BuildUserStatsEmbed(user, sentimentScore, alignmentScore, lastUpdated, optOut);
         await command.RespondAsync(embed: embed);
     }
 
@@ -285,18 +300,25 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         var userId = user.Id.ToString();
         var guildId = guild.Id.ToString();
 
-        // Calculate guild-specific stats from UserSentiments
-        var sentiments = await dbContext.UserSentiments
-            .Where(s => s.UserId == userId && s.GuildId == guildId)
-            .ToListAsync();
+        // Get pre-computed scores
+        var sentimentScore = await dbContext.UserSentimentScores
+            .FirstOrDefaultAsync(s => s.UserId == userId);
+
+        var alignmentScore = await dbContext.UserAlignmentScores
+            .FirstOrDefaultAsync(s => s.UserId == userId);
 
         var optOut = await dbContext.UserOptOuts.FirstOrDefaultAsync(o => o.UserId == userId);
 
-        var embed = BuildUserStatsEmbed(user, sentiments, optOut);
+        // Get last updated timestamp from UserSentiments
+        var lastUpdated = await dbContext.UserSentiments
+            .Where(s => s.UserId == userId && s.GuildId == guildId)
+            .MaxAsync(s => (DateTime?)s.CreatedAt);
+
+        var embed = BuildUserStatsEmbed(user, sentimentScore, alignmentScore, lastUpdated, optOut);
         await command.RespondAsync(embed: embed);
     }
 
-    private static Embed BuildUserStatsEmbed(SocketUser user, List<UserSentiment> sentiments, UserOptOut? optOut)
+    private static Embed BuildUserStatsEmbed(SocketUser user, UserSentimentScore? sentimentScore, UserAlignmentScore? alignmentScore, DateTime? lastUpdated, UserOptOut? optOut)
     {
         var embed = new EmbedBuilder()
             .WithTitle($"Sentiment Stats for {user.Username}")
@@ -308,28 +330,101 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         {
             embed.WithDescription("⚠️ This user has opted out of sentiment analysis.");
         }
-        else if (sentiments.Count == 0)
+        else if (sentimentScore is null || sentimentScore.TotalMessages == 0)
         {
             embed.WithDescription("No stats available for this user in this server yet.");
         }
         else
         {
-            var totalMessages = sentiments.Count;
-            var toxicMessages = sentiments.Count(s => s.IsToxic);
-            var nonToxicMessages = totalMessages - toxicMessages;
-            var toxicityPercentage = totalMessages > 0 ? (double)toxicMessages / totalMessages * 100 : 0;
-            var lastUpdated = sentiments.Max(s => s.CreatedAt);
-            var timestamp = new DateTimeOffset(DateTime.SpecifyKind(lastUpdated, DateTimeKind.Utc)).ToUnixTimeSeconds();
+            var timestamp = lastUpdated.HasValue 
+                ? new DateTimeOffset(DateTime.SpecifyKind(lastUpdated.Value, DateTimeKind.Utc)).ToUnixTimeSeconds() 
+                : 0;
+
             embed
-                .AddField("Total Messages", totalMessages.ToString(), inline: true)
-                .AddField("Toxic Messages", toxicMessages.ToString(), inline: true)
-                .AddField("Non-Toxic Messages", nonToxicMessages.ToString(), inline: true)
-                .AddField("Toxicity Percentage", $"{toxicityPercentage:F2}%", inline: true)
-                .AddField("Last Updated", $"<t:{timestamp}:R>", inline: true);
+                .AddField("Total Messages", sentimentScore.TotalMessages.ToString(), inline: true)
+                .AddField("Toxic Messages", sentimentScore.ToxicMessages.ToString(), inline: true)
+                .AddField("Non-Toxic Messages", sentimentScore.NonToxicMessages.ToString(), inline: true)
+                .AddField("Toxicity Percentage", $"{sentimentScore.ToxicityPercentage:F2}%", inline: true);
+
+            // Add alignment info if available
+            if (alignmentScore is not null)
+            {
+                var dominantAlignment = alignmentScore.DominantAlignment;
+                embed.AddField("Dominant Alignment", $"{GetAlignmentEmoji(dominantAlignment)} {FormatAlignment(dominantAlignment)}", inline: true);
+
+                if (timestamp > 0)
+                {
+                    embed.AddField("Last Updated", $"<t:{timestamp}:R>", inline: true);
+                }
+
+                // Build top 3 alignment distribution
+                var alignmentCounts = new Dictionary<string, int>
+                {
+                    [nameof(AlignmentType.LawfulGood)] = alignmentScore.LawfulGoodCount,
+                    [nameof(AlignmentType.NeutralGood)] = alignmentScore.NeutralGoodCount,
+                    [nameof(AlignmentType.ChaoticGood)] = alignmentScore.ChaoticGoodCount,
+                    [nameof(AlignmentType.LawfulNeutral)] = alignmentScore.LawfulNeutralCount,
+                    [nameof(AlignmentType.TrueNeutral)] = alignmentScore.TrueNeutralCount,
+                    [nameof(AlignmentType.ChaoticNeutral)] = alignmentScore.ChaoticNeutralCount,
+                    [nameof(AlignmentType.LawfulEvil)] = alignmentScore.LawfulEvilCount,
+                    [nameof(AlignmentType.NeutralEvil)] = alignmentScore.NeutralEvilCount,
+                    [nameof(AlignmentType.ChaoticEvil)] = alignmentScore.ChaoticEvilCount
+                };
+
+                var totalAlignmentMessages = alignmentCounts.Values.Sum();
+                var topAlignments = alignmentCounts
+                    .Where(kvp => kvp.Value > 0)
+                    .OrderByDescending(kvp => kvp.Value)
+                    .Take(3);
+
+                if (topAlignments.Any())
+                {
+                    var alignmentDistribution = string.Join("\n", topAlignments.Select(kvp =>
+                    {
+                        var percentage = totalAlignmentMessages > 0 ? (double)kvp.Value / totalAlignmentMessages * 100 : 0;
+                        var emoji = GetAlignmentEmoji(kvp.Key);
+                        return $"{emoji} **{FormatAlignment(kvp.Key)}**: {kvp.Value} ({percentage:F1}%)";
+                    }));
+
+                    embed.AddField("Alignment Distribution", alignmentDistribution, inline: false);
+                }
+            }
+            else if (timestamp > 0)
+            {
+                embed.AddField("Last Updated", $"<t:{timestamp}:R>", inline: true);
+            }
         }
 
         return embed.Build();
     }
+    
+    private static string GetAlignmentEmoji(string alignment) => alignment switch
+    {
+        nameof(AlignmentType.LawfulGood) => "⚖️",
+        nameof(AlignmentType.NeutralGood) => "😇",
+        nameof(AlignmentType.ChaoticGood) => "🎭",
+        nameof(AlignmentType.LawfulNeutral) => "📜",
+        nameof(AlignmentType.TrueNeutral) => "⚖️",
+        nameof(AlignmentType.ChaoticNeutral) => "🎲",
+        nameof(AlignmentType.LawfulEvil) => "👔",
+        nameof(AlignmentType.NeutralEvil) => "😈",
+        nameof(AlignmentType.ChaoticEvil) => "💀",
+        _ => "❓"
+    };
+    
+    private static string FormatAlignment(string alignment) => alignment switch
+    {
+        nameof(AlignmentType.LawfulGood) => "Lawful Good",
+        nameof(AlignmentType.NeutralGood) => "Neutral Good",
+        nameof(AlignmentType.ChaoticGood) => "Chaotic Good",
+        nameof(AlignmentType.LawfulNeutral) => "Lawful Neutral",
+        nameof(AlignmentType.TrueNeutral) => "True Neutral",
+        nameof(AlignmentType.ChaoticNeutral) => "Chaotic Neutral",
+        nameof(AlignmentType.LawfulEvil) => "Lawful Evil",
+        nameof(AlignmentType.NeutralEvil) => "Neutral Evil",
+        nameof(AlignmentType.ChaoticEvil) => "Chaotic Evil",
+        _ => alignment
+    };
 
     private async Task HandleShowLeaderboardAsync(SocketSlashCommand command)
     {
@@ -344,24 +439,67 @@ public class DiscordCommandHandler : IDiscordCommandHandler
 
         var userId = command.User.Id.ToString();
         var isAdmin = _discordSettings.Value.AdminList.Contains(userId);
+        
+        // Get sort parameter (default to toxicity)
+        var sortBy = command.Data.Options.FirstOrDefault(o => o.Name == "sort")?.Value as string ?? "toxicity";
+        var isToxicitySort = sortBy.Equals("toxicity", StringComparison.OrdinalIgnoreCase);
 
-        IQueryable<UserSentimentScore> query = dbContext.UserSentimentScores;
-
+        // For non-admin users, scope to current guild
+        HashSet<string>? guildUserIds = null;
         if (!isAdmin)
         {
-            var guildUserIds = guild.Users.Select(u => u.Id.ToString()).ToHashSet();
-            query = query.Where(s => guildUserIds.Contains(s.UserId));
+            guildUserIds = [.. guild.Users.Select(u => u.Id.ToString())];
         }
 
-        var leaderboard = await query
-            .OrderByDescending(s => s.TotalMessages)
-            .ThenByDescending(s => s.ToxicityPercentage)
-            .Take(isAdmin ? 50 : 10)
-            .ToListAsync();
+        // Get both sentiment and alignment scores
+        IQueryable<UserSentimentScore> sentimentQuery = dbContext.UserSentimentScores;
+        IQueryable<UserAlignmentScore> alignmentQuery = dbContext.UserAlignmentScores;
+        
+        if (!isAdmin && guildUserIds != null)
+        {
+            sentimentQuery = sentimentQuery.Where(s => guildUserIds.Contains(s.UserId));
+            alignmentQuery = alignmentQuery.Where(s => guildUserIds.Contains(s.UserId));
+        }
 
-        // For global view, get the most recent sentiment data for each user to display username, guild, and channel
-        Dictionary<string, UserSentiment?>? sentimentDetails = null;
-        if (isAdmin && leaderboard.Count > 0)
+        var sentimentScores = await sentimentQuery.ToListAsync();
+        var alignmentScores = await alignmentQuery.ToListAsync();
+
+        // Join the data
+        var combinedData = sentimentScores
+            .Select(s => new
+            {
+                UserId = s.UserId,
+                TotalMessages = s.TotalMessages,
+                ToxicityPercentage = s.ToxicityPercentage,
+                Alignment = alignmentScores.FirstOrDefault(a => a.UserId == s.UserId)?.DominantAlignment ?? nameof(AlignmentType.TrueNeutral)
+            })
+            .ToList();
+
+        // Sort based on user preference
+        List<(string UserId, double ToxicityPercentage, string Alignment, int TotalMessages)> leaderboard;
+        
+        if (isToxicitySort)
+        {
+            leaderboard = [.. combinedData
+                .OrderByDescending(x => x.TotalMessages)
+                .ThenByDescending(x => x.ToxicityPercentage)
+                .Take(isAdmin ? 50 : 10)
+                .Select(x => (x.UserId, x.ToxicityPercentage, x.Alignment, x.TotalMessages))];
+        }
+        else
+        {
+            // Sort by most "good" alignment (Lawful Good = 9, Chaotic Evil = 1)
+            leaderboard = [.. combinedData
+                .OrderByDescending(x => x.TotalMessages)
+                .ThenByDescending(x => Enum.TryParse<AlignmentType>(x.Alignment, out var alignmentEnum) ? (int)alignmentEnum : 0)
+                .Take(isAdmin ? 50 : 10)
+                .Select(x => (x.UserId, x.ToxicityPercentage, x.Alignment, x.TotalMessages))];
+        }
+
+        // Get user details for display
+        Dictionary<string, (string Username, string? GuildName, string? ChannelName)> userDetails = [];
+        
+        if (leaderboard.Count > 0)
         {
             var userIds = leaderboard.Select(l => l.UserId).ToList();
             var recentSentiments = await dbContext.UserSentiments
@@ -370,20 +508,27 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                 .Select(g => g.OrderByDescending(s => s.CreatedAt).FirstOrDefault())
                 .ToListAsync();
 
-            sentimentDetails = recentSentiments
-                .Where(s => s != null)
-                .ToDictionary(s => s!.UserId, s => s);
+            foreach (var sentiment in recentSentiments.Where(s => s != null))
+            {
+                userDetails[sentiment!.UserId] = (sentiment.Username, sentiment.GuildName, sentiment.ChannelName);
+            }
         }
 
-        var embed = BuildLeaderboardEmbed(guild, leaderboard, isAdmin, sentimentDetails);
+        var embed = BuildLeaderboardEmbed(guild, leaderboard, isAdmin, isToxicitySort, userDetails);
         await command.RespondAsync(embed: embed, ephemeral: isAdmin);
     }
 
-    private static Embed BuildLeaderboardEmbed(SocketGuild guild, List<UserSentimentScore> leaderboard, bool isGlobalView, Dictionary<string, UserSentiment?>? sentimentDetails = null)
+    private static Embed BuildLeaderboardEmbed(
+        SocketGuild guild, 
+        List<(string UserId, double ToxicityPercentage, string Alignment, int TotalMessages)> leaderboard, 
+        bool isGlobalView, 
+        bool isToxicitySort,
+        Dictionary<string, (string Username, string? GuildName, string? ChannelName)> userDetails)
     {
+        var sortType = isToxicitySort ? "Toxicity" : "Alignment";
         var title = isGlobalView
-            ? "🐍 Global Toxicity Leaderboard"
-            : $"🐍 Toxicity Leaderboard - {guild.Name}";
+            ? $"🐍 Global {sortType} Leaderboard"
+            : $"🐍 {sortType} Leaderboard - {guild.Name}";
 
         var embed = new EmbedBuilder()
             .WithTitle(title)
@@ -401,16 +546,20 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         var description = string.Join('\n', leaderboard.Select((stat, index) =>
         {
             var medal = GetRankMedal(index);
+            var (userId, toxicityPercentage, alignment, totalMessages) = stat;
+            var alignmentEmoji = GetAlignmentEmoji(alignment);
+            var alignmentFormatted = FormatAlignment(alignment);
 
-            if (isGlobalView && sentimentDetails?.TryGetValue(stat.UserId, out var sentiment) == true && sentiment != null)
+            if (isGlobalView && userDetails.TryGetValue(userId, out var details))
             {
-                return $"{medal} **{sentiment.Username}** (Guild: {sentiment.GuildName}, Channel: {sentiment.ChannelName}) - {stat.ToxicityPercentage:F2}% toxic ({stat.ToxicMessages}/{stat.TotalMessages} messages)";
+                return $"{medal} **{details.Username}** - {alignmentEmoji} {alignmentFormatted} | {toxicityPercentage:F1}% toxic | {totalMessages} msgs";
             }
             else
             {
-                var user = guild.GetUser(ulong.Parse(stat.UserId));
-                var username = user?.Username ?? $"Unknown User ({stat.UserId})";
-                return $"{medal} **{username}** - {stat.ToxicityPercentage:F2}% toxic ({stat.ToxicMessages}/{stat.TotalMessages} messages)";
+                var user = guild.GetUser(ulong.Parse(userId));
+                var username = user?.Username ?? $"Unknown User ({userId})";
+                
+                return $"{medal} **{username}** - {alignmentEmoji} {alignmentFormatted} | {toxicityPercentage:F1}% toxic | {totalMessages} msgs";
             }
         }));
 
@@ -466,6 +615,10 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                 .ExecuteDeleteAsync();
 
             await dbContext.UserSentimentScores
+                .Where(s => s.UserId == userId)
+                .ExecuteDeleteAsync();
+            
+            await dbContext.UserAlignmentScores
                 .Where(s => s.UserId == userId)
                 .ExecuteDeleteAsync();
         }
@@ -584,11 +737,16 @@ public class DiscordCommandHandler : IDiscordCommandHandler
             var embedColor = classificationResult?.IsToxic == true ? 0xFF6B6Bu : BrandColor;
             var model = _metadata?.DefaultModelId ?? "Unknown Model";
 
+            var alignment = classificationResult?.Alignment ?? "TrueNeutral";
+            var alignmentEmoji = GetAlignmentEmoji(alignment);
+            var alignmentFormatted = FormatAlignment(alignment);
+
             var embed = new EmbedBuilder()
                 .WithTitle("🔍 Toxicity Check Result")
                 .WithDescription($"**Message:**{Environment.NewLine}{message}")
                 .WithColor(embedColor)
                 .AddField("Sentiment", classificationResult?.IsToxic == true ? "🐍 Toxic" : "😇 Nice", inline: true)
+                .AddField("Alignment", $"{alignmentEmoji} {alignmentFormatted}", inline: true)
                 .AddField("Model", $"Text evaluated with `{model}`.", inline: true)
                 .WithFooter($"Completed in `{sw.ElapsedMilliseconds} ms`.")
                 .WithCurrentTimestamp()
@@ -597,11 +755,12 @@ public class DiscordCommandHandler : IDiscordCommandHandler
             await command.FollowupAsync(embed: embed, ephemeral: true);
 
             _logger.LogInformation(
-                "Check command used by user {UserId} ({Username}). Message: '{Message}', Result: {IsToxic}",
+                "Check command used by user {UserId} ({Username}). Message: '{Message}', Result: {IsToxic}, Alignment: {Alignment}",
                 command.User.Id,
                 command.User.Username,
                 message,
-                classificationResult?.IsToxic ?? false);
+                classificationResult?.IsToxic ?? false,
+                alignment);
         }
         catch (Exception ex)
         {

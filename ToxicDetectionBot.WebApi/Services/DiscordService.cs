@@ -1,4 +1,4 @@
-using Discord;
+﻿using Discord;
 using Discord.WebSocket;
 using Hangfire;
 using Microsoft.Extensions.AI;
@@ -120,7 +120,8 @@ public partial class DiscordService : IDiscordService
             Username = username,
             GuildName = guildName,
             ChannelName = channelName,
-            IsToxic = cResult?.IsToxic ?? false
+            IsToxic = cResult?.IsToxic ?? false,
+            Alignment = cResult?.Alignment ?? nameof(AlignmentType.TrueNeutral)
         });
         await dbContext.SaveChangesAsync().ConfigureAwait(false);
     }
@@ -238,4 +239,4 @@ public partial class DiscordService : IDiscordService
 /// <summary>
 /// Bound to the JSON Schema
 /// </summary>
-internal record ClassificationResult(bool IsToxic);
+internal record ClassificationResult(bool IsToxic, string Alignment);

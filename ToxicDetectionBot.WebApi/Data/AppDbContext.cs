@@ -2,14 +2,11 @@
 
 namespace ToxicDetectionBot.WebApi.Data;
 
-public class AppDbContext : DbContext
+public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
-    {
-    }
-
     public DbSet<UserSentiment> UserSentiments { get; set; }
     public DbSet<UserSentimentScore> UserSentimentScores { get; set; }
+    public DbSet<UserAlignmentScore> UserAlignmentScores { get; set; }
     public DbSet<UserOptOut> UserOptOuts { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -18,6 +15,7 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<UserSentiment>(entity =>
         {
+            entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.UserId);
             entity.HasIndex(e => e.GuildId);
             entity.HasIndex(e => e.IsSummarized);
@@ -26,6 +24,11 @@ public class AppDbContext : DbContext
         });
 
         modelBuilder.Entity<UserSentimentScore>(entity =>
+        {
+            entity.HasKey(e => e.UserId);
+        });
+
+        modelBuilder.Entity<UserAlignmentScore>(entity =>
         {
             entity.HasKey(e => e.UserId);
         });
