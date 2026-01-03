@@ -3,6 +3,7 @@ namespace ToxicDetectionBot.WebApi.Data;
 public class UserAlignmentScore
 {
     public required string UserId { get; set; }
+    public required string GuildId { get; set; }
     public int LawfulGoodCount { get; set; }
     public int NeutralGoodCount { get; set; }
     public int ChaoticGoodCount { get; set; }

@@ -26,11 +26,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<UserSentimentScore>(entity =>
         {
             entity.HasKey(e => e.UserId);
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.GuildId);
         });
 
         modelBuilder.Entity<UserAlignmentScore>(entity =>
         {
             entity.HasKey(e => e.UserId);
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.GuildId);
         });
 
         modelBuilder.Entity<UserOptOut>(entity =>

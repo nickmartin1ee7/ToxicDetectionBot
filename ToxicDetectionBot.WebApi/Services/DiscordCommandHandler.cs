@@ -96,7 +96,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                         var debugUserCommands = BuildUserCommands("-debug");
                         ApplicationCommandProperties[] allDebugCommands = [.. debugCommands, .. debugUserCommands];
                         
-                        await guild.BulkOverwriteApplicationCommandAsync(allDebugCommands);
+                        await guild.BulkOverwriteApplicationCommandAsync(allDebugCommands).ConfigureAwait(false);
                         _logger.LogInformation("Successfully registered {Count} debug commands to debug guild {GuildId} ({GuildName})", 
                             allDebugCommands.Length, debugGuildId, guild.Name);
                     }
@@ -113,7 +113,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         }
         else
         {
-            _ = Task.Run(async () => await client.BulkOverwriteGlobalApplicationCommandsAsync(allCommands));
+            _ = Task.Run(async () => await client.BulkOverwriteGlobalApplicationCommandsAsync(allCommands).ConfigureAwait(false));
         }
     }
 
@@ -137,7 +137,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                     command.Channel.Id,
                     command.GuildId);
 
-                _ = Task.Run(async () => await handler(command, client));
+                _ = Task.Run(async () => await handler(command, client).ConfigureAwait(false));
             }
             else
             {
@@ -150,7 +150,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
 
             if (!command.HasResponded)
             {
-                await command.RespondAsync("An error occurred while processing your command.", ephemeral: true);
+                await command.RespondAsync("An error occurred while processing your command.", ephemeral: true).ConfigureAwait(false);
             }
         }
     }
@@ -177,7 +177,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                     command.Channel.Id,
                     command.GuildId);
 
-                _ = Task.Run(async () => await handler(command, client));
+                _ = Task.Run(async () => await handler(command, client).ConfigureAwait(false));
             }
             else
             {
@@ -190,7 +190,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
 
             if (!command.HasResponded)
             {
-                await command.RespondAsync("An error occurred while processing your command.", ephemeral: true);
+                await command.RespondAsync("An error occurred while processing your command.", ephemeral: true).ConfigureAwait(false);
             }
         }
     }
@@ -258,7 +258,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
 
         if (command.Channel is not SocketGuildChannel { Guild: var guild })
         {
-            await command.RespondAsync("This command can only be used in a server.", ephemeral: true);
+            await command.RespondAsync("This command can only be used in a server.", ephemeral: true).ConfigureAwait(false);
             return;
         }
 
@@ -268,35 +268,30 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         var userId = user.Id.ToString();
         var guildId = guild.Id.ToString();
 
-        // Get pre-computed scores
+        var optOut = await dbContext.UserOptOuts.FirstOrDefaultAsync(o => o.UserId == userId).ConfigureAwait(false);
+
+        // Get pre-computed scores for this specific guild
         var sentimentScore = await dbContext.UserSentimentScores
-            .FirstOrDefaultAsync(s => s.UserId == userId);
+            .FirstOrDefaultAsync(s => s.UserId == userId && s.GuildId == guildId).ConfigureAwait(false);
 
         var alignmentScore = await dbContext.UserAlignmentScores
-            .FirstOrDefaultAsync(s => s.UserId == userId);
+            .FirstOrDefaultAsync(s => s.UserId == userId && s.GuildId == guildId).ConfigureAwait(false);
 
-        var optOut = await dbContext.UserOptOuts.FirstOrDefaultAsync(o => o.UserId == userId);
-
-        // Get last updated timestamp from UserSentiments
-        var lastUpdated = await dbContext.UserSentiments
-            .Where(s => s.UserId == userId && s.GuildId == guildId)
-            .MaxAsync(s => (DateTime?)s.CreatedAt);
-
-        var embed = BuildUserStatsEmbed(user, sentimentScore, alignmentScore, lastUpdated, optOut);
-        await command.RespondAsync(embed: embed);
+        var embed = BuildUserStatsEmbed(user, sentimentScore, alignmentScore, optOut);
+        await command.RespondAsync(embed: embed).ConfigureAwait(false);
     }
 
     private async Task HandleShowStatsAsync(SocketSlashCommand command, DiscordSocketClient? client)
     {
         if (command.Data.Options.FirstOrDefault()?.Value is not SocketUser user)
         {
-            await command.RespondAsync("User has no sentiment yet.", ephemeral: true);
+            await command.RespondAsync("User has no sentiment yet.", ephemeral: true).ConfigureAwait(false);
             return;
         }
 
         if (command.Channel is not SocketGuildChannel { Guild: var guild })
         {
-            await command.RespondAsync("This command can only be used in a server.", ephemeral: true);
+            await command.RespondAsync("This command can only be used in a server.", ephemeral: true).ConfigureAwait(false);
             return;
         }
 
@@ -306,25 +301,20 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         var userId = user.Id.ToString();
         var guildId = guild.Id.ToString();
 
-        // Get pre-computed scores
+        var optOut = await dbContext.UserOptOuts.FirstOrDefaultAsync(o => o.UserId == userId).ConfigureAwait(false);
+
+        // Get pre-computed scores for this specific guild
         var sentimentScore = await dbContext.UserSentimentScores
-            .FirstOrDefaultAsync(s => s.UserId == userId);
+            .FirstOrDefaultAsync(s => s.UserId == userId && s.GuildId == guildId).ConfigureAwait(false);
 
         var alignmentScore = await dbContext.UserAlignmentScores
-            .FirstOrDefaultAsync(s => s.UserId == userId);
+            .FirstOrDefaultAsync(s => s.UserId == userId && s.GuildId == guildId).ConfigureAwait(false);
 
-        var optOut = await dbContext.UserOptOuts.FirstOrDefaultAsync(o => o.UserId == userId);
-
-        // Get last updated timestamp from UserSentiments
-        var lastUpdated = await dbContext.UserSentiments
-            .Where(s => s.UserId == userId && s.GuildId == guildId)
-            .MaxAsync(s => (DateTime?)s.CreatedAt);
-
-        var embed = BuildUserStatsEmbed(user, sentimentScore, alignmentScore, lastUpdated, optOut);
-        await command.RespondAsync(embed: embed);
+        var embed = BuildUserStatsEmbed(user, sentimentScore, alignmentScore, optOut);
+        await command.RespondAsync(embed: embed).ConfigureAwait(false);
     }
 
-    private static Embed BuildUserStatsEmbed(SocketUser user, UserSentimentScore? sentimentScore, UserAlignmentScore? alignmentScore, DateTime? lastUpdated, UserOptOut? optOut)
+    private static Embed BuildUserStatsEmbed(SocketUser user, UserSentimentScore? sentimentScore, UserAlignmentScore? alignmentScore, UserOptOut? optOut)
     {
         var embed = new EmbedBuilder()
             .WithTitle($"Sentiment Stats for {user.Username}")
@@ -342,9 +332,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         }
         else
         {
-            var timestamp = lastUpdated.HasValue 
-                ? new DateTimeOffset(DateTime.SpecifyKind(lastUpdated.Value, DateTimeKind.Utc)).ToUnixTimeSeconds() 
-                : 0;
+            var timestamp = new DateTimeOffset(DateTime.SpecifyKind(sentimentScore.SummarizedAt, DateTimeKind.Utc)).ToUnixTimeSeconds();
 
             embed
                 .AddField("Total Messages", sentimentScore.TotalMessages.ToString(), inline: true)
@@ -395,7 +383,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                     embed.AddField("Alignment Distribution", alignmentDistribution, inline: false);
                 }
             }
-            else if (timestamp > 0)
+            else
             {
                 embed.AddField("Last Updated", $"<t:{timestamp}:R>", inline: true);
             }
@@ -436,9 +424,11 @@ public class DiscordCommandHandler : IDiscordCommandHandler
     {
         if (command.Channel is not SocketGuildChannel { Guild: var guild })
         {
-            await command.RespondAsync("This command can only be used in a server.");
+            await command.RespondAsync("This command can only be used in a server.").ConfigureAwait(false);
             return;
         }
+
+        await command.DeferAsync().ConfigureAwait(false);
 
         using var scope = _serviceScopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -450,86 +440,147 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         var sortBy = command.Data.Options.FirstOrDefault(o => o.Name == "sort")?.Value as string ?? "toxicity";
         var isToxicitySort = sortBy.Equals("toxicity", StringComparison.OrdinalIgnoreCase);
 
-        // For non-admin users, scope to current guild
-        HashSet<string>? guildUserIds = null;
-        if (!isAdmin)
+        var guildId = guild.Id.ToString();
+
+        List<(string UserId, double ToxicityPercentage, string Alignment, int TotalMessages, string? GuildName, string? ChannelName)> leaderboard;
+
+        if (isAdmin)
         {
-            guildUserIds = [.. guild.Users.Select(u => u.Id.ToString())];
-        }
+            // Admin: aggregate across all guilds
+            var sentimentScores = await dbContext.UserSentimentScores.ToListAsync().ConfigureAwait(false);
+            var alignmentScores = await dbContext.UserAlignmentScores.ToListAsync().ConfigureAwait(false);
 
-        // Get both sentiment and alignment scores
-        IQueryable<UserSentimentScore> sentimentQuery = dbContext.UserSentimentScores;
-        IQueryable<UserAlignmentScore> alignmentQuery = dbContext.UserAlignmentScores;
-        
-        if (!isAdmin && guildUserIds != null)
-        {
-            sentimentQuery = sentimentQuery.Where(s => guildUserIds.Contains(s.UserId));
-            alignmentQuery = alignmentQuery.Where(s => guildUserIds.Contains(s.UserId));
-        }
+            // Aggregate by UserId across all guilds
+            var aggregatedData = sentimentScores
+                .GroupBy(s => s.UserId)
+                .Select(g => new
+                {
+                    UserId = g.Key,
+                    TotalMessages = g.Sum(s => s.TotalMessages),
+                    ToxicMessages = g.Sum(s => s.ToxicMessages),
+                    ToxicityPercentage = g.Sum(s => s.TotalMessages) > 0 
+                        ? (double)g.Sum(s => s.ToxicMessages) / g.Sum(s => s.TotalMessages) * 100 
+                        : 0,
+                    // Get dominant alignment across all guilds
+                    Alignments = alignmentScores.Where(a => a.UserId == g.Key).ToList()
+                })
+                .Select(x => new
+                {
+                    x.UserId,
+                    x.TotalMessages,
+                    x.ToxicityPercentage,
+                    Alignment = GetGlobalDominantAlignment(x.Alignments)
+                })
+                .ToList();
 
-        var sentimentScores = await sentimentQuery.ToListAsync();
-        var alignmentScores = await alignmentQuery.ToListAsync();
-
-        // Join the data
-        var combinedData = sentimentScores
-            .Select(s => new
+            // Sort and take top 50
+            List<(string UserId, double ToxicityPercentage, string Alignment, int TotalMessages)> topUsers;
+            
+            if (isToxicitySort)
             {
-                UserId = s.UserId,
-                TotalMessages = s.TotalMessages,
-                ToxicityPercentage = s.ToxicityPercentage,
-                Alignment = alignmentScores.FirstOrDefault(a => a.UserId == s.UserId)?.DominantAlignment ?? nameof(AlignmentType.TrueNeutral)
-            })
-            .ToList();
+                topUsers = [.. aggregatedData
+                    .OrderByDescending(x => x.TotalMessages)
+                    .ThenByDescending(x => x.ToxicityPercentage)
+                    .Take(50)
+                    .Select(x => (x.UserId, x.ToxicityPercentage, x.Alignment, x.TotalMessages))];
+            }
+            else
+            {
+                topUsers = [.. aggregatedData
+                    .OrderByDescending(x => x.TotalMessages)
+                    .ThenByDescending(x => Enum.TryParse<AlignmentType>(x.Alignment, out var alignmentEnum) ? (int)alignmentEnum : 0)
+                    .Take(50)
+                    .Select(x => (x.UserId, x.ToxicityPercentage, x.Alignment, x.TotalMessages))];
+            }
 
-        // Sort based on user preference
-        List<(string UserId, double ToxicityPercentage, string Alignment, int TotalMessages)> leaderboard;
-        
-        if (isToxicitySort)
-        {
-            leaderboard = [.. combinedData
-                .OrderByDescending(x => x.TotalMessages)
-                .ThenByDescending(x => x.ToxicityPercentage)
-                .Take(isAdmin ? 50 : 10)
-                .Select(x => (x.UserId, x.ToxicityPercentage, x.Alignment, x.TotalMessages))];
-        }
-        else
-        {
-            // Sort by most "good" alignment (Lawful Good = 9, Chaotic Evil = 1)
-            leaderboard = [.. combinedData
-                .OrderByDescending(x => x.TotalMessages)
-                .ThenByDescending(x => Enum.TryParse<AlignmentType>(x.Alignment, out var alignmentEnum) ? (int)alignmentEnum : 0)
-                .Take(isAdmin ? 50 : 10)
-                .Select(x => (x.UserId, x.ToxicityPercentage, x.Alignment, x.TotalMessages))];
-        }
-
-        // Get user details for display
-        Dictionary<string, (string Username, string? GuildName, string? ChannelName)> userDetails = [];
-        
-        if (leaderboard.Count > 0)
-        {
-            var userIds = leaderboard.Select(l => l.UserId).ToList();
+            // Get user details from most recent sentiment in any guild
+            var userIds = topUsers.Select(t => t.UserId).ToList();
             var recentSentiments = await dbContext.UserSentiments
                 .Where(s => userIds.Contains(s.UserId))
                 .GroupBy(s => s.UserId)
                 .Select(g => g.OrderByDescending(s => s.CreatedAt).FirstOrDefault())
-                .ToListAsync();
+                .ToListAsync()
+                .ConfigureAwait(false);
 
-            foreach (var sentiment in recentSentiments.Where(s => s != null))
+            var userDetailsDict = recentSentiments
+                .Where(s => s != null)
+                .ToDictionary(s => s!.UserId, s => (s!.Username, s.GuildName, s.ChannelName));
+
+            leaderboard = topUsers.Select(t => {
+                userDetailsDict.TryGetValue(t.UserId, out var details);
+                return (t.UserId, t.ToxicityPercentage, t.Alignment, t.TotalMessages, details.GuildName, details.ChannelName);
+            }).ToList();
+        }
+        else
+        {
+            var sentimentScores = await dbContext.UserSentimentScores
+                .Where(s => s.GuildId == guildId)
+                .ToListAsync()
+                .ConfigureAwait(false);
+
+            var alignmentScores = await dbContext.UserAlignmentScores
+                .Where(s => s.GuildId == guildId)
+                .ToListAsync()
+                .ConfigureAwait(false);
+
+            var combinedData = sentimentScores
+                .Select(s => new
+                {
+                    UserId = s.UserId,
+                    TotalMessages = s.TotalMessages,
+                    ToxicityPercentage = s.ToxicityPercentage,
+                    Alignment = alignmentScores.FirstOrDefault(a => a.UserId == s.UserId && a.GuildId == guildId)?.DominantAlignment ?? nameof(AlignmentType.TrueNeutral)
+                })
+                .ToList();
+
+            if (isToxicitySort)
             {
-                userDetails[sentiment!.UserId] = (sentiment.Username, sentiment.GuildName, sentiment.ChannelName);
+                leaderboard = [.. combinedData
+                    .OrderByDescending(x => x.TotalMessages)
+                    .ThenByDescending(x => x.ToxicityPercentage)
+                    .Take(10)
+                    .Select(x => (x.UserId, x.ToxicityPercentage, x.Alignment, x.TotalMessages, (string?)null, (string?)null))];
+            }
+            else
+            {
+                leaderboard = [.. combinedData
+                    .OrderByDescending(x => x.TotalMessages)
+                    .ThenByDescending(x => Enum.TryParse<AlignmentType>(x.Alignment, out var alignmentEnum) ? (int)alignmentEnum : 0)
+                    .Take(10)
+                    .Select(x => (x.UserId, x.ToxicityPercentage, x.Alignment, x.TotalMessages, (string?)null, (string?)null))];
             }
         }
 
-        var embed = BuildLeaderboardEmbed(guild, leaderboard, isAdmin, isToxicitySort, userDetails);
-        await command.RespondAsync(embed: embed, ephemeral: isAdmin);
+        var embed = BuildLeaderboardEmbed(guild, leaderboard, isAdmin, isToxicitySort);
+        await command.FollowupAsync(embed: embed, ephemeral: isAdmin).ConfigureAwait(false);
+    }
+
+    private static string GetGlobalDominantAlignment(List<UserAlignmentScore> alignmentScores)
+    {
+        if (alignmentScores.Count == 0)
+            return nameof(AlignmentType.TrueNeutral);
+
+        var totalAlignments = new Dictionary<string, int>
+        {
+            [nameof(AlignmentType.LawfulGood)] = alignmentScores.Sum(a => a.LawfulGoodCount),
+            [nameof(AlignmentType.NeutralGood)] = alignmentScores.Sum(a => a.NeutralGoodCount),
+            [nameof(AlignmentType.ChaoticGood)] = alignmentScores.Sum(a => a.ChaoticGoodCount),
+            [nameof(AlignmentType.LawfulNeutral)] = alignmentScores.Sum(a => a.LawfulNeutralCount),
+            [nameof(AlignmentType.TrueNeutral)] = alignmentScores.Sum(a => a.TrueNeutralCount),
+            [nameof(AlignmentType.ChaoticNeutral)] = alignmentScores.Sum(a => a.ChaoticNeutralCount),
+            [nameof(AlignmentType.LawfulEvil)] = alignmentScores.Sum(a => a.LawfulEvilCount),
+            [nameof(AlignmentType.NeutralEvil)] = alignmentScores.Sum(a => a.NeutralEvilCount),
+            [nameof(AlignmentType.ChaoticEvil)] = alignmentScores.Sum(a => a.ChaoticEvilCount)
+        };
+
+        return totalAlignments.OrderByDescending(kvp => kvp.Value).First().Key;
     }
 
     private static Embed BuildLeaderboardEmbed(
         SocketGuild guild, 
-        List<(string UserId, double ToxicityPercentage, string Alignment, int TotalMessages)> leaderboard, 
+        List<(string UserId, double ToxicityPercentage, string Alignment, int TotalMessages, string? GuildName, string? ChannelName)> leaderboard, 
         bool isGlobalView, 
-        bool isToxicitySort,
-        Dictionary<string, (string Username, string? GuildName, string? ChannelName)> userDetails)
+        bool isToxicitySort)
     {
         var sortType = isToxicitySort ? "Toxicity" : "Alignment";
         var title = isGlobalView
@@ -552,13 +603,17 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         var description = string.Join('\n', leaderboard.Select((stat, index) =>
         {
             var medal = GetRankMedal(index);
-            var (userId, toxicityPercentage, alignment, totalMessages) = stat;
+            var (userId, toxicityPercentage, alignment, totalMessages, guildName, channelName) = stat;
             var alignmentEmoji = GetAlignmentEmoji(alignment);
             var alignmentFormatted = FormatAlignment(alignment);
 
-            if (isGlobalView && userDetails.TryGetValue(userId, out var details))
+            if (isGlobalView)
             {
-                return $"{medal} **{details.Username}** - {alignmentEmoji} {alignmentFormatted} | {toxicityPercentage:F1}% toxic | {totalMessages} msgs";
+                var user = guild.GetUser(ulong.Parse(userId));
+                var username = user?.Username ?? $"Unknown User";
+                var guildInfo = guildName != null ? $" (Guild: {guildName})" : "";
+                
+                return $"{medal} **{username}** - {alignmentEmoji} {alignmentFormatted} | {toxicityPercentage:F1}% toxic | {totalMessages} msgs{guildInfo}";
             }
             else
             {
@@ -585,7 +640,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
     {
         if (command.Data.Options.FirstOrDefault()?.Value is not string choice)
         {
-            await command.RespondAsync("Invalid choice.", ephemeral: true);
+            await command.RespondAsync("Invalid choice.", ephemeral: true).ConfigureAwait(false);
             return;
         }
 
@@ -595,7 +650,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         using var scope = _serviceScopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var optOut = await dbContext.UserOptOuts.FindAsync(userId);
+        var optOut = await dbContext.UserOptOuts.FindAsync(userId).ConfigureAwait(false);
 
         if (optOut is null)
         {
@@ -618,24 +673,27 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         {
             await dbContext.UserSentiments
                 .Where(s => s.UserId == userId)
-                .ExecuteDeleteAsync();
+                .ExecuteDeleteAsync()
+                .ConfigureAwait(false);
 
             await dbContext.UserSentimentScores
                 .Where(s => s.UserId == userId)
-                .ExecuteDeleteAsync();
+                .ExecuteDeleteAsync()
+                .ConfigureAwait(false);
             
             await dbContext.UserAlignmentScores
                 .Where(s => s.UserId == userId)
-                .ExecuteDeleteAsync();
+                .ExecuteDeleteAsync()
+                .ConfigureAwait(false);
         }
 
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync().ConfigureAwait(false);
 
         var message = isOptingOut
             ? "✅ You have opted **OUT** of sentiment analysis. Your messages will no longer be evaluated and your existing data has been deleted."
             : "✅ You have opted **IN** to sentiment analysis. Your messages will now be evaluated.";
 
-        await command.RespondAsync(message, ephemeral: true);
+        await command.RespondAsync(message, ephemeral: true).ConfigureAwait(false);
 
         _logger.LogInformation(
             "User {UserId} ({Username}) opted {OptStatus} of sentiment analysis",
@@ -646,7 +704,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
     {
         if (command.Data.Options.FirstOrDefault()?.Value is not string message)
         {
-            await command.RespondAsync("Please provide a feedback message.", ephemeral: true);
+            await command.RespondAsync("Please provide a feedback message.", ephemeral: true).ConfigureAwait(false);
             return;
         }
 
@@ -655,7 +713,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         if (string.IsNullOrWhiteSpace(webhookUrl))
         {
             _logger.LogWarning("Feedback command used but FeedbackWebhookUrl is not configured");
-            await command.RespondAsync("Feedback system is not configured. Please contact the administrator.", ephemeral: true);
+            await command.RespondAsync("Feedback system is not configured. Please contact the administrator.", ephemeral: true).ConfigureAwait(false);
             return;
         }
 
@@ -686,11 +744,11 @@ public class DiscordCommandHandler : IDiscordCommandHandler
             };
 
             var httpClient = _httpClientFactory.CreateClient();
-            var response = await httpClient.PostAsJsonAsync(webhookUrl, embed);
+            var response = await httpClient.PostAsJsonAsync(webhookUrl, embed).ConfigureAwait(false);
 
             if (response.IsSuccessStatusCode)
             {
-                await command.RespondAsync("✅ Thank you for your feedback! Your message has been sent to the developer.", ephemeral: true);
+                await command.RespondAsync("✅ Thank you for your feedback! Your message has been sent to the developer.", ephemeral: true).ConfigureAwait(false);
 
                 _logger.LogInformation(
                     "Feedback submitted by user {UserId} ({Username}) from server {GuildName}: {Message}",
@@ -723,11 +781,11 @@ public class DiscordCommandHandler : IDiscordCommandHandler
     {
         if (command.Data.Options.FirstOrDefault()?.Value is not string message)
         {
-            await command.RespondAsync("Please provide a message to check.", ephemeral: true);
+            await command.RespondAsync("Please provide a message to check.", ephemeral: true).ConfigureAwait(false);
             return;
         }
 
-        await command.DeferAsync(ephemeral: true);
+        await command.DeferAsync(ephemeral: true).ConfigureAwait(false);
 
         try
         {
@@ -735,7 +793,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
             sw.Start();
             var result = await _chatClient.GetResponseAsync(
                 chatMessage: message,
-                options: _chatOptions);
+                options: _chatOptions).ConfigureAwait(false);
             sw.Stop();
 
             var resultText = result.Text.Trim();
@@ -758,7 +816,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                 .WithCurrentTimestamp()
                 .Build();
 
-            await command.FollowupAsync(embed: embed, ephemeral: true);
+            await command.FollowupAsync(embed: embed, ephemeral: true).ConfigureAwait(false);
 
             _logger.LogInformation(
                 "Check command used by user {UserId} ({Username}). Message: '{Message}', Result: {IsToxic}, Alignment: {Alignment}",
@@ -774,13 +832,13 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                 command.User.Id,
                 command.User.Username);
 
-            await command.FollowupAsync("❌ An error occurred while checking the message. Please try again later.", ephemeral: true);
+            await command.FollowupAsync("❌ An error occurred while checking the message. Please try again later.", ephemeral: true).ConfigureAwait(false);
         }
     }
 
     private async Task HandleBotStatsAsync(SocketSlashCommand command, DiscordSocketClient? client)
     {
-        await command.DeferAsync(ephemeral: true);
+        await command.DeferAsync(ephemeral: true).ConfigureAwait(false);
 
         try
         {
@@ -795,10 +853,10 @@ public class DiscordCommandHandler : IDiscordCommandHandler
             var threadCount = process.Threads.Count;
 
             // Get database stats (non-PII)
-            var totalSentiments = await dbContext.UserSentiments.CountAsync();
-            var totalUsers = await dbContext.UserSentimentScores.CountAsync();
-            var totalAlignmentUsers = await dbContext.UserAlignmentScores.CountAsync();
-            var totalOptOuts = await dbContext.UserOptOuts.CountAsync(o => o.IsOptedOut);
+            var totalSentiments = await dbContext.UserSentiments.CountAsync().ConfigureAwait(false);
+            var totalUsers = await dbContext.UserSentimentScores.CountAsync().ConfigureAwait(false);
+            var totalAlignmentUsers = await dbContext.UserAlignmentScores.CountAsync().ConfigureAwait(false);
+            var totalOptOuts = await dbContext.UserOptOuts.CountAsync(o => o.IsOptedOut).ConfigureAwait(false);
 
             // Get guild count
             var guildCount = client?.Guilds.Count ?? 0;
@@ -827,7 +885,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                 totalUsers,
                 dbSize);
 
-            await command.FollowupAsync(embed: embed, ephemeral: true);
+            await command.FollowupAsync(embed: embed, ephemeral: true).ConfigureAwait(false);
 
             _logger.LogInformation(
                 "BotStats command used by user {UserId} ({Username})",
@@ -840,7 +898,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                 command.User.Id,
                 command.User.Username);
 
-            await command.FollowupAsync("❌ An error occurred while retrieving bot statistics. Please try again later.", ephemeral: true);
+            await command.FollowupAsync("❌ An error occurred while retrieving bot statistics. Please try again later.", ephemeral: true).ConfigureAwait(false);
         }
     }
 

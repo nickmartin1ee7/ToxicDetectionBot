@@ -38,14 +38,16 @@ public class SentimentSummarizerService : ISentimentSummarizerService
             return;
         }
 
-        var userGroups = unsummarizedSentiments.GroupBy(us => us.UserId);
+        // Group by both UserId AND GuildId for per-server stats
+        var userGuildGroups = unsummarizedSentiments.GroupBy(us => new { us.UserId, us.GuildId });
         var totalToxicMessages = 0;
         var totalNonToxicMessages = 0;
 
-        foreach (var userGroup in userGroups)
+        foreach (var userGuildGroup in userGuildGroups)
         {
-            var userId = userGroup.Key;
-            var sentiments = userGroup.ToList();
+            var userId = userGuildGroup.Key.UserId;
+            var guildId = userGuildGroup.Key.GuildId;
+            var sentiments = userGuildGroup.ToList();
 
             var messageCount = sentiments.Count;
             var toxicMessages = sentiments.Count(s => s.IsToxic);
@@ -54,9 +56,9 @@ public class SentimentSummarizerService : ISentimentSummarizerService
             totalToxicMessages += toxicMessages;
             totalNonToxicMessages += nonToxicMessages;
 
-            // Update sentiment scores
+            // Update sentiment scores per guild
             var existingScore = await dbContext.UserSentimentScores
-                .FirstOrDefaultAsync(s => s.UserId == userId);
+                .FirstOrDefaultAsync(s => s.UserId == userId && s.GuildId == guildId);
 
             if (existingScore is not null)
             {
@@ -77,6 +79,7 @@ public class SentimentSummarizerService : ISentimentSummarizerService
                 var sentimentScore = new UserSentimentScore
                 {
                     UserId = userId,
+                    GuildId = guildId,
                     TotalMessages = messageCount,
                     ToxicMessages = toxicMessages,
                     NonToxicMessages = nonToxicMessages,
@@ -86,12 +89,12 @@ public class SentimentSummarizerService : ISentimentSummarizerService
                 dbContext.UserSentimentScores.Add(sentimentScore);
             }
 
-            // Update alignment scores
+            // Update alignment scores per guild
             var alignmentCounts = sentiments.GroupBy(s => s.Alignment)
                 .ToDictionary(g => g.Key, g => g.Count());
 
             var existingAlignmentScore = await dbContext.UserAlignmentScores
-                .FirstOrDefaultAsync(s => s.UserId == userId);
+                .FirstOrDefaultAsync(s => s.UserId == userId && s.GuildId == guildId);
 
             if (existingAlignmentScore is not null)
             {
@@ -113,6 +116,7 @@ public class SentimentSummarizerService : ISentimentSummarizerService
                 var alignmentScore = new UserAlignmentScore
                 {
                     UserId = userId,
+                    GuildId = guildId,
                     LawfulGoodCount = alignmentCounts.GetValueOrDefault(nameof(AlignmentType.LawfulGood), 0),
                     NeutralGoodCount = alignmentCounts.GetValueOrDefault(nameof(AlignmentType.NeutralGood), 0),
                     ChaoticGoodCount = alignmentCounts.GetValueOrDefault(nameof(AlignmentType.ChaoticGood), 0),
@@ -142,8 +146,8 @@ public class SentimentSummarizerService : ISentimentSummarizerService
             : 0;
 
         _logger.LogInformation(
-            "Sentiment summarization completed. Processed {UserCount} users with {TotalMessages} messages ({ToxicMessages} toxic, {NonToxicMessages} non-toxic, {ToxicityPercentage:F2}% toxic overall)",
-            userGroups.Count(),
+            "Sentiment summarization completed. Processed {UserGuildCount} user-guild combinations with {TotalMessages} messages ({ToxicMessages} toxic, {NonToxicMessages} non-toxic, {ToxicityPercentage:F2}% toxic overall)",
+            userGuildGroups.Count(),
             totalMessages,
             totalToxicMessages,
             totalNonToxicMessages,

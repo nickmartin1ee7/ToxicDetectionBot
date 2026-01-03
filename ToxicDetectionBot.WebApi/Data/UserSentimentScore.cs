@@ -3,6 +3,7 @@ namespace ToxicDetectionBot.WebApi.Data;
 public class UserSentimentScore
 {
     public required string UserId { get; set; }
+    public required string GuildId { get; set; }
     public int TotalMessages { get; set; }
     public int ToxicMessages { get; set; }
     public int NonToxicMessages { get; set; }
