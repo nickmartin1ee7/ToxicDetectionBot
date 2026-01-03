@@ -7,7 +7,7 @@ public static class AlignmentHelper
     public static string GetAlignmentEmoji(string alignment) => alignment switch
     {
         nameof(AlignmentType.LawfulGood) => "??",
-        nameof(AlignmentType.NeutralGood) => "??",
+        nameof(AlignmentType.NeutralGood) => "???",
         nameof(AlignmentType.ChaoticGood) => "??",
         nameof(AlignmentType.LawfulNeutral) => "??",
         nameof(AlignmentType.TrueNeutral) => "??",
