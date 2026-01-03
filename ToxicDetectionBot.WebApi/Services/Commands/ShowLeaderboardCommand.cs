@@ -31,13 +31,13 @@ public class ShowLeaderboardCommand : ISlashCommand
             return;
         }
 
-        await command.DeferAsync().ConfigureAwait(false);
+        var userId = command.User.Id.ToString();
+        var isAdmin = _discordSettings.Value.AdminList.Contains(userId);
+        
+        await command.DeferAsync(ephemeral: isAdmin).ConfigureAwait(false);
 
         using var scope = _serviceScopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-        var userId = command.User.Id.ToString();
-        var isAdmin = _discordSettings.Value.AdminList.Contains(userId);
 
         // Get sort parameter (default to toxicity)
         var sortBy = command.Data.Options.FirstOrDefault(o => o.Name == "sort")?.Value as string ?? "toxicity";
