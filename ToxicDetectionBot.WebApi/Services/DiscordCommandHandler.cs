@@ -319,14 +319,13 @@ public class DiscordCommandHandler : IDiscordCommandHandler
             var nonToxicMessages = totalMessages - toxicMessages;
             var toxicityPercentage = totalMessages > 0 ? (double)toxicMessages / totalMessages * 100 : 0;
             var lastUpdated = sentiments.Max(s => s.CreatedAt);
-            var timestamp = new DateTimeOffset(lastUpdated).ToUnixTimeSeconds();
-
+            var timestamp = new DateTimeOffset(DateTime.SpecifyKind(lastUpdated, DateTimeKind.Utc)).ToUnixTimeSeconds();
             embed
                 .AddField("Total Messages", totalMessages.ToString(), inline: true)
                 .AddField("Toxic Messages", toxicMessages.ToString(), inline: true)
                 .AddField("Non-Toxic Messages", nonToxicMessages.ToString(), inline: true)
                 .AddField("Toxicity Percentage", $"{toxicityPercentage:F2}%", inline: true)
-                .AddField("Last Updated (UTC)", $"<t:{timestamp}:R>", inline: true);
+                .AddField("Last Updated", $"<t:{timestamp}:R>", inline: true);
         }
 
         return embed.Build();
