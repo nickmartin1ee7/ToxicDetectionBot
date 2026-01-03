@@ -5,12 +5,13 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using System;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using ToxicDetectionBot.WebApi.Configuration;
 using ToxicDetectionBot.WebApi.Data;
 
 namespace ToxicDetectionBot.WebApi.Services;
 
-public class DiscordService : IDiscordService
+public partial class DiscordService : IDiscordService
 {
     private readonly ILogger<DiscordService> _logger;
     private readonly IChatClient _chatClient;
@@ -179,6 +180,11 @@ public class DiscordService : IDiscordService
             return;
         }
 
+        if (WebsiteRegex().IsMatch(messageContent))
+        {
+            return;
+        }
+
         var channel = message.Channel;
         var guildChannel = channel as SocketGuildChannel;
         var guildId = guildChannel?.Guild.Id.ToString() ?? "0";
@@ -213,6 +219,9 @@ public class DiscordService : IDiscordService
 
         _bg.Enqueue<DiscordService>(ds => ds.ClassifyMessage(message.Id.ToString(), userId, messageContent, username, guildId, guildName, channelName));
     }
+
+    [GeneratedRegex(@"^https?:\/\/[^\s/]+\.[a-zA-Z]{2,}(\/.*)?$")]
+    private static partial Regex WebsiteRegex();
 }
 
 /// <summary>
