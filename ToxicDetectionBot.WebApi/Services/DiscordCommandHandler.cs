@@ -13,8 +13,8 @@ namespace ToxicDetectionBot.WebApi.Services;
 public interface IDiscordCommandHandler
 {
     Task RegisterCommandsAsync(DiscordSocketClient client);
-    Task HandleSlashCommandAsync(SocketSlashCommand command);
-    Task HandleUserCommandAsync(SocketUserCommand command);
+    Task HandleSlashCommandAsync(SocketSlashCommand command, DiscordSocketClient? client);
+    Task HandleUserCommandAsync(SocketUserCommand command, DiscordSocketClient? client);
 }
 
 public class DiscordCommandHandler : IDiscordCommandHandler
@@ -26,8 +26,8 @@ public class DiscordCommandHandler : IDiscordCommandHandler
     private readonly IOptions<DiscordSettings> _discordSettings;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IChatClient _chatClient;
-    private readonly Dictionary<string, Func<SocketSlashCommand, Task>> _commandHandlers;
-    private readonly Dictionary<string, Func<SocketUserCommand, Task>> _userCommandHandlers;
+    private readonly Dictionary<string, Func<SocketSlashCommand, DiscordSocketClient?, Task>> _commandHandlers;
+    private readonly Dictionary<string, Func<SocketUserCommand, DiscordSocketClient?, Task>> _userCommandHandlers;
     private readonly ChatOptions? _chatOptions;
     private readonly ChatClientMetadata? _metadata;
 
@@ -53,7 +53,8 @@ public class DiscordCommandHandler : IDiscordCommandHandler
             ["showleaderboard"] = HandleShowLeaderboardAsync,
             ["opt"] = HandleOptAsync,
             ["feedback"] = HandleFeedbackAsync,
-            ["check"] = HandleCheckAsync
+            ["check"] = HandleCheckAsync,
+            ["botstats"] = HandleBotStatsAsync
         };
         _userCommandHandlers = new()
         {
@@ -116,7 +117,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         }
     }
 
-    public async Task HandleSlashCommandAsync(SocketSlashCommand command)
+    public async Task HandleSlashCommandAsync(SocketSlashCommand command, DiscordSocketClient? client)
     {
         try
         {
@@ -136,7 +137,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                     command.Channel.Id,
                     command.GuildId);
 
-                _ = Task.Run(async () => await handler(command));
+                _ = Task.Run(async () => await handler(command, client));
             }
             else
             {
@@ -154,7 +155,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         }
     }
 
-    public async Task HandleUserCommandAsync(SocketUserCommand command)
+    public async Task HandleUserCommandAsync(SocketUserCommand command, DiscordSocketClient? client)
     {
         try
         {
@@ -176,7 +177,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
                     command.Channel.Id,
                     command.GuildId);
 
-                _ = Task.Run(async () => await handler(command));
+                _ = Task.Run(async () => await handler(command, client));
             }
             else
             {
@@ -236,6 +237,11 @@ public class DiscordCommandHandler : IDiscordCommandHandler
             .WithName($"check{suffix}")
             .WithDescription("Check if a message would be considered toxic")
             .AddOption("message", ApplicationCommandOptionType.String, "The message to check", isRequired: true, minLength: 1, maxLength: 2000)
+            .Build(),
+
+        new SlashCommandBuilder()
+            .WithName($"botstats{suffix}")
+            .WithDescription("Show bot system statistics and performance metrics")
             .Build()
     ];
 
@@ -246,7 +252,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
             .Build()
     ];
 
-    private async Task HandleShowStatsUserCommandAsync(SocketUserCommand command)
+    private async Task HandleShowStatsUserCommandAsync(SocketUserCommand command, DiscordSocketClient? client)
     {
         var user = command.Data.Member;
 
@@ -280,7 +286,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         await command.RespondAsync(embed: embed);
     }
 
-    private async Task HandleShowStatsAsync(SocketSlashCommand command)
+    private async Task HandleShowStatsAsync(SocketSlashCommand command, DiscordSocketClient? client)
     {
         if (command.Data.Options.FirstOrDefault()?.Value is not SocketUser user)
         {
@@ -426,7 +432,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         _ => alignment
     };
 
-    private async Task HandleShowLeaderboardAsync(SocketSlashCommand command)
+    private async Task HandleShowLeaderboardAsync(SocketSlashCommand command, DiscordSocketClient? client)
     {
         if (command.Channel is not SocketGuildChannel { Guild: var guild })
         {
@@ -575,7 +581,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         _ => $"{index + 1}."
     };
 
-    private async Task HandleOptAsync(SocketSlashCommand command)
+    private async Task HandleOptAsync(SocketSlashCommand command, DiscordSocketClient? client)
     {
         if (command.Data.Options.FirstOrDefault()?.Value is not string choice)
         {
@@ -636,7 +642,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
             userId, command.User.Username, isOptingOut ? "OUT" : "IN");
     }
 
-    private async Task HandleFeedbackAsync(SocketSlashCommand command)
+    private async Task HandleFeedbackAsync(SocketSlashCommand command, DiscordSocketClient? client)
     {
         if (command.Data.Options.FirstOrDefault()?.Value is not string message)
         {
@@ -713,7 +719,7 @@ public class DiscordCommandHandler : IDiscordCommandHandler
         }
     }
 
-    private async Task HandleCheckAsync(SocketSlashCommand command)
+    private async Task HandleCheckAsync(SocketSlashCommand command, DiscordSocketClient? client)
     {
         if (command.Data.Options.FirstOrDefault()?.Value is not string message)
         {
@@ -770,5 +776,111 @@ public class DiscordCommandHandler : IDiscordCommandHandler
 
             await command.FollowupAsync("❌ An error occurred while checking the message. Please try again later.", ephemeral: true);
         }
+    }
+
+    private async Task HandleBotStatsAsync(SocketSlashCommand command, DiscordSocketClient? client)
+    {
+        await command.DeferAsync(ephemeral: true);
+
+        try
+        {
+            using var scope = _serviceScopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            // Get process information
+            var process = Process.GetCurrentProcess();
+            var uptime = DateTime.UtcNow - process.StartTime.ToUniversalTime();
+            var memoryMb = process.WorkingSet64 / 1024.0 / 1024.0;
+            var cpuTime = process.TotalProcessorTime;
+            var threadCount = process.Threads.Count;
+
+            // Get database stats (non-PII)
+            var totalSentiments = await dbContext.UserSentiments.CountAsync();
+            var totalUsers = await dbContext.UserSentimentScores.CountAsync();
+            var totalAlignmentUsers = await dbContext.UserAlignmentScores.CountAsync();
+            var totalOptOuts = await dbContext.UserOptOuts.CountAsync(o => o.IsOptedOut);
+
+            // Get guild count
+            var guildCount = client?.Guilds.Count ?? 0;
+
+            // Get database size (if supported)
+            string? dbSize = null;
+            try
+            {
+                var connection = dbContext.Database.GetDbConnection();
+                var idx = Math.Max(connection.ConnectionString.LastIndexOf('\\'), connection.ConnectionString.LastIndexOf('/')) + 1;
+                var fileName = connection.ConnectionString[idx ..];
+                dbSize = $"{new FileInfo(fileName).Length / 1024.0 / 1024.0:F2} MB";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Unable to retrieve database size");
+            }
+
+            var embed = BuildBotStatsEmbed(
+                uptime,
+                memoryMb,
+                cpuTime,
+                threadCount,
+                guildCount,
+                totalSentiments,
+                totalUsers,
+                dbSize);
+
+            await command.FollowupAsync(embed: embed, ephemeral: true);
+
+            _logger.LogInformation(
+                "BotStats command used by user {UserId} ({Username})",
+                command.User.Id,
+                command.User.Username);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving bot stats for user {UserId} ({Username})",
+                command.User.Id,
+                command.User.Username);
+
+            await command.FollowupAsync("❌ An error occurred while retrieving bot statistics. Please try again later.", ephemeral: true);
+        }
+    }
+
+    private static Embed BuildBotStatsEmbed(
+        TimeSpan uptime,
+        double memoryMb,
+        TimeSpan cpuTime,
+        int threadCount,
+        int guildCount,
+        int totalSentiments,
+        int totalUsers,
+        string? dbSize)
+    {
+        var embed = new EmbedBuilder()
+            .WithTitle("🤖 Bot Statistics")
+            .WithColor(BrandColor)
+            .WithCurrentTimestamp();
+
+        // System Information
+        var systemInfo = $"**Uptime:** {uptime.Days}d {uptime.Hours}h {uptime.Minutes}m\n" +
+                        $"**Memory:** {memoryMb:F2} MB\n" +
+                        $"**CPU Time:** {cpuTime.TotalSeconds:F1}s\n" +
+                        $"**Threads:** {threadCount}";
+        embed.AddField("📊 System", systemInfo, inline: true);
+
+        // Discord Information
+        var discordInfo = $"**Guilds:** {guildCount}";
+        embed.AddField("💬 Discord", discordInfo, inline: true);
+
+        // Database Statistics
+        var dbStats = $"**Total Messages:** {totalSentiments:N0}\n" +
+                     $"**Users:** {totalUsers:N0}\n";
+        
+        if (!string.IsNullOrWhiteSpace(dbSize))
+        {
+            dbStats += $"**Database Size:** {dbSize}";
+        }
+
+        embed.AddField("🗄️ Database", dbStats, inline: false);
+
+        return embed.Build();
     }
 }

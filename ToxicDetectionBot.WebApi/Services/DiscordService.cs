@@ -159,12 +159,12 @@ public partial class DiscordService : IDiscordService
 
     private async Task SlashCommandExecutedAsync(SocketSlashCommand command)
     {
-        _ = _discordCommandHandler.HandleSlashCommandAsync(command).ConfigureAwait(false);
+        _ = _discordCommandHandler.HandleSlashCommandAsync(command, s_client).ConfigureAwait(false);
     }
 
     private async Task UserCommandExecutedAsync(SocketUserCommand command)
     {
-        _ = _discordCommandHandler.HandleUserCommandAsync(command).ConfigureAwait(false);
+        _ = _discordCommandHandler.HandleUserCommandAsync(command, s_client).ConfigureAwait(false);
     }
 
     private async Task MessageReceivedAsync(SocketMessage message)
