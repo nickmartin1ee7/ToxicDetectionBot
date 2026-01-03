@@ -182,6 +182,10 @@ public partial class DiscordService : IDiscordService
 
         if (WebsiteRegex().IsMatch(messageContent))
         {
+            _logger.LogInformation("Message {MessageId} from user '{Username}' (ID: {UserId}) appears to be a link, skipping sentiment analysis.",
+                message.Id,
+                message.Author.Username,
+                message.Author.Id);
             return;
         }
 
