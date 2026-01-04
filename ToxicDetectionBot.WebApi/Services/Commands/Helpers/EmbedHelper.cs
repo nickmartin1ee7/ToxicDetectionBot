@@ -190,7 +190,7 @@ public static class EmbedHelper
             .AddField("Sentiment", isToxic ? $"{DiscordConstants.ToxicEmoji} Toxic" : $"{DiscordConstants.NiceEmoji} Nice", inline: true)
             .AddField("Alignment", $"{alignmentEmoji} {alignmentFormatted}", inline: true)
             .AddField("Model", $"Text evaluated with `{model}`.", inline: true)
-            .WithFooter($"Completed in `{elapsedMilliseconds} ms`.")
+            .WithFooter($"Completed in {elapsedMilliseconds} ms.")
             .WithCurrentTimestamp()
             .Build();
 
