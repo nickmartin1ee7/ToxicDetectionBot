@@ -6,6 +6,9 @@ A Discord bot that monitors server messages and performs sentiment analysis to d
 
 ToxicDetectionBot is an ASP.NET Core web application that integrates with Discord to automatically analyze the sentiment of messages sent in Discord servers. It uses Ollama's local LLM capabilities to classify messages as toxic or non-toxic, maintaining statistical records to help server moderators identify patterns of negative behavior.
 
+![/ShowStats command](https://i.imgur.com/BPz9cCD.png)
+![/ShowLeaderboard command](https://i.imgur.com/GuIbrcA.png)
+
 ## Core Functionality
 
 ### Automated Message Analysis
