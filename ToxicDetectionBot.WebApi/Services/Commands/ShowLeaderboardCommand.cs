@@ -1,3 +1,4 @@
+using Discord;
 using Discord.WebSocket;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -25,46 +26,55 @@ public class ShowLeaderboardCommand : ISlashCommand
 
     public async Task HandleAsync(SocketSlashCommand command, DiscordSocketClient? client)
     {
-        if (command.Channel is not SocketGuildChannel { Guild: var guild })
+        SocketGuild? guild = null;
+        var isGuildChannel = command.Channel is SocketGuildChannel guildChannel && (guild = guildChannel.Guild) != null;
+        var isDM = command.Channel is IDMChannel;
+
+        // Non-admin users can only use this in a server
+        var userId = command.User.Id.ToString();
+        var isAdmin = _discordSettings.Value.AdminList.Contains(userId);
+
+        if (!isAdmin && !isGuildChannel)
         {
             await command.RespondAsync("This command can only be used in a server.").ConfigureAwait(false);
             return;
         }
 
-        var userId = command.User.Id.ToString();
-        var isAdmin = _discordSettings.Value.AdminList.Contains(userId);
-        
-        await command.DeferAsync(ephemeral: isAdmin).ConfigureAwait(false);
-
-        using var scope = _serviceScopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
         // Get sort parameter (default to toxicity)
         var sortBy = command.Data.Options.FirstOrDefault(o => o.Name == "sort")?.Value as string ?? "toxicity";
         var isToxicitySort = sortBy.Equals("toxicity", StringComparison.OrdinalIgnoreCase);
 
-        var guildId = guild.Id.ToString();
+        // Determine if we should show global leaderboard (only for admins in DMs)
+        var showGlobalLeaderboard = isDM && isAdmin;
+
+        await command.DeferAsync(ephemeral: showGlobalLeaderboard).ConfigureAwait(false);
+
+        using var scope = _serviceScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         List<(string UserId, double ToxicityPercentage, string Alignment, int TotalMessages, string? Username, string? GuildName, string? ChannelName)> leaderboard;
 
-        if (isAdmin)
+        if (showGlobalLeaderboard)
         {
+            // Admin in DM: Show global leaderboard
             leaderboard = await BuildGlobalLeaderboardAsync(dbContext, isToxicitySort).ConfigureAwait(false);
         }
         else
         {
+            // Guild channel (anyone including admins): Show guild-specific leaderboard
+            var guildId = guild!.Id.ToString();
             leaderboard = await BuildGuildLeaderboardAsync(dbContext, guildId, isToxicitySort).ConfigureAwait(false);
         }
 
-        var embed = EmbedHelper.BuildLeaderboardEmbed(guild, leaderboard, isAdmin, isToxicitySort);
-        await command.FollowupAsync(embed: embed, ephemeral: isAdmin).ConfigureAwait(false);
+        var embed = EmbedHelper.BuildLeaderboardEmbed(guild, leaderboard, showGlobalLeaderboard, isToxicitySort);
+        await command.FollowupAsync(embed: embed, ephemeral: showGlobalLeaderboard).ConfigureAwait(false);
     }
 
     private static async Task<List<(string UserId, double ToxicityPercentage, string Alignment, int TotalMessages, string? Username, string? GuildName, string? ChannelName)>> BuildGlobalLeaderboardAsync(
         AppDbContext dbContext,
         bool isToxicitySort)
     {
-        // Admin: aggregate across all guilds
+        // Admin in DM: aggregate across all guilds
         var sentimentScores = await dbContext.UserSentimentScores.ToListAsync().ConfigureAwait(false);
         var alignmentScores = await dbContext.UserAlignmentScores.ToListAsync().ConfigureAwait(false);
 
