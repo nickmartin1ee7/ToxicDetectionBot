@@ -66,7 +66,7 @@ public class ShowLeaderboardCommand : ISlashCommand
             leaderboard = await BuildGuildLeaderboardAsync(dbContext, guildId, isToxicitySort).ConfigureAwait(false);
         }
 
-        var embed = EmbedHelper.BuildLeaderboardEmbed(guild, leaderboard, showGlobalLeaderboard, isToxicitySort);
+        var embed = EmbedHelper.BuildLeaderboardEmbed(guild!, leaderboard, showGlobalLeaderboard, isToxicitySort);
         await command.FollowupAsync(embed: embed, ephemeral: showGlobalLeaderboard).ConfigureAwait(false);
     }
 
