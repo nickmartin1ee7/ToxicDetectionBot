@@ -1,5 +1,4 @@
 using Hangfire;
-using Hangfire.Storage.SQLite;
 using Microsoft.EntityFrameworkCore;
 using ToxicDetectionBot.WebApi.Configuration;
 using ToxicDetectionBot.WebApi.Data;
@@ -13,7 +12,6 @@ builder.AddServiceDefaults();
 builder.AddSeqEndpoint("seq");
 
 var dbPathSentiment = Path.Combine(builder.Environment.ContentRootPath, $"{nameof(ToxicDetectionBot)}-sentiment.db");
-var dbPathHangfire = Path.Combine(builder.Environment.ContentRootPath, $"{nameof(ToxicDetectionBot)}-hangfire.db");
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
@@ -53,8 +51,7 @@ builder.Services.AddScoped<BotStatsCommand>();
 builder.Services.AddScoped<ShowStatsUserCommand>();
 
 builder.Services.AddHangfire(configuration => 
-    configuration.UseSQLiteStorage(
-        Path.Combine(builder.Environment.ContentRootPath, dbPathHangfire)));
+    configuration.UseInMemoryStorage());
 builder.Services.AddHangfireServer();
 
 builder.AddOllamaApiClient("chat")
