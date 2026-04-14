@@ -6,17 +6,21 @@ using ToxicDetectionBot.WebApi.Services.Commands.Helpers;
 
 namespace ToxicDetectionBot.WebApi.Services.Commands;
 
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 public class ShowStatsCommand : ISlashCommand
 {
     private readonly ILogger<ShowStatsCommand> _logger;
     private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly AlignmentChartService _alignmentChartService;
 
     public ShowStatsCommand(
         ILogger<ShowStatsCommand> logger,
-        IServiceScopeFactory serviceScopeFactory)
+        IServiceScopeFactory serviceScopeFactory,
+        AlignmentChartService alignmentChartService)
     {
         _logger = logger;
         _serviceScopeFactory = serviceScopeFactory;
+        _alignmentChartService = alignmentChartService;
     }
 
     public async Task HandleAsync(SocketSlashCommand command, DiscordSocketClient? client)
@@ -49,6 +53,33 @@ public class ShowStatsCommand : ISlashCommand
             .FirstOrDefaultAsync(s => s.UserId == userId && s.GuildId == guildId).ConfigureAwait(false);
 
         var embed = EmbedHelper.BuildUserStatsEmbed(user, sentimentScore, alignmentScore, optOut);
-        await command.RespondAsync(embed: embed).ConfigureAwait(false);
+
+        // Generate and attach alignment chart image
+        if (alignmentScore != null)
+        {
+            try
+            {
+                var chartBytes = await _alignmentChartService.GenerateAlignmentChartAsync(alignmentScore, CancellationToken.None).ConfigureAwait(false);
+                using (var stream = new MemoryStream(chartBytes))
+                {
+                    await command.RespondWithFileAsync(
+                        new FileAttachment(stream, "alignment-chart.png"),
+                        text: $"Stats for {user.Mention}",
+                        embeds: new[] { embed }
+                    ).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to generate alignment chart for user {UserId}", userId);
+                // Fallback: send embed without chart
+                await command.RespondAsync(embed: embed).ConfigureAwait(false);
+            }
+        }
+        else
+        {
+            // No alignment data, send embed only
+            await command.RespondAsync(embed: embed).ConfigureAwait(false);
+        }
     }
 }

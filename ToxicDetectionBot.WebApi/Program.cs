@@ -40,9 +40,12 @@ builder.Services.AddScoped<IBackgroundJobService, BackgroundJobService>();
 builder.Services.AddScoped<ISentimentSummarizerService, SentimentSummarizerService>();
 builder.Services.AddScoped<IRetentionService, RetentionService>();
 builder.Services.AddScoped<IDiscordCommandHandler, DiscordCommandHandler>();
+#pragma warning disable CA1416
+builder.Services.AddScoped<AlignmentChartService>();
 
 // Register command classes
 builder.Services.AddScoped<ShowStatsCommand>();
+#pragma warning restore CA1416
 builder.Services.AddScoped<ShowLeaderboardCommand>();
 builder.Services.AddScoped<OptCommand>();
 builder.Services.AddScoped<FeedbackCommand>();
